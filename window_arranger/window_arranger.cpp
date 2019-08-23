@@ -18,7 +18,7 @@
 #define ERROR_EXIT __COUNTER__+1
 
 static void log(const std::string& s) {
-	static std::ofstream f("logmy.txt");//TODO
+	static std::ofstream f("logmy.txt");//TODO better logging
 	f << s << std::endl;
 	f.flush();
 }

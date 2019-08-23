@@ -8,11 +8,11 @@
 using Handle = HANDLE;
 
 class Position {
+public:
 	std::wstring wAppId;
 	std::string appId;
 	int index;
 
-public:
 	Position() : index(-1) {};
 	Position(const std::wstring& wAppId, int index) : wAppId(wAppId), index(index) {
 		convertToUTF8();
@@ -24,7 +24,7 @@ public:
 
 	rapidjson::Value toJson(rapidjson::MemoryPoolAllocator<>& allocator) const {
 		return std::move(rapidjson::Value(rapidjson::kObjectType)
-			.AddMember("appId", appId, allocator)
+			.AddMember("group", appId, allocator)
 			.AddMember("index", index, allocator));
 	}
 	template <class CharT>
