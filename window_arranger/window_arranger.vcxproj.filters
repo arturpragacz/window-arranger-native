@@ -50,5 +50,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="ClassDiagram.cd" />
+    <None Include="window_arranger.json" />
   </ItemGroup>
 </Project>

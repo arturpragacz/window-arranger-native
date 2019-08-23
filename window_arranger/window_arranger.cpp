@@ -16,7 +16,7 @@
 //#define WM_WINDOWS_POSITIONS_CHANGED WM_USER+1
 
 static void log(const std::string& s) {
-	static std::ofstream f("logmy.txt");
+	static std::ofstream f("logmy.txt");//TODO
 	f << s << std::endl;
 	f.flush();
 }
@@ -59,7 +59,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 		std::thread reader([] {
 			uint32_t size = 0; int i = 3; //TODO
 			while (std::cin.read(reinterpret_cast<char*>(&size), sizeof size)) {
-				if(i--) break; //TODO
+				if(i--<0) break; //TODO
 				log(size);
 				auto data = new std::string(size, '\0');
 
@@ -104,6 +104,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 		reader.join();
 
+		log("END");
 		return (int)msg.wParam;
 	}
 	catch (TaskbarManager::Exception& e) {
@@ -117,26 +118,46 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 }
 
 
-static void sendMessage(const std::string& message) {
+static void postMessage(const std::string& message) {
 	uint32_t size = static_cast<uint32_t>(message.length());
 	std::cout << size;
 	std::cout << message;
 }
 
-template <class T>
-static void sendResponse(T preValue, int id) {
+//rapidjson::Document createResponseJsonDoc(int id, const std::string& status) {
+//	rapidjson::Document d;
+//
+//	d["source"].SetString("browser");
+//	d["id"].SetInt(id);
+//	d["type"].SetString("response");
+//	d["status"] = status;
+//
+//	return d;
+//}
+
+struct NoPreValue { void toJson(rapidjson::MemoryPoolAllocator<>& allocator) {} };
+template <class T = NoPreValue>
+static void postResponse(int id, const std::string& status = "OK", T preValue = T()) {
 	rapidjson::Document d;
 
 	d["source"].SetString("browser");
 	d["id"].SetInt(id);
 	d["type"].SetString("response");
-	d["value"] = preValue.toJson(d.GetAllocator());
+	d["status"].SetString(status, d.GetAllocator());
+
+	if (std::negation_v<std::is_same<T, NoPreValue>>)
+		d["value"] = preValue.toJson(d.GetAllocator());
 	//d.AddMember("value", value, d.GetAllocator());
 
 	rapidjson::StringBuffer buffer;
 	rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
 	d.Accept(writer);
-	sendMessage(buffer.GetString());
+	postMessage(buffer.GetString());
+}
+
+template <class T>
+static void postResponse(int id, T preValue) {
+	postResponse(id, "OK", preValue);
 }
 
 static int processMessage(const std::string& data, TaskbarManager& tb) {
@@ -158,23 +179,21 @@ static int processMessage(const std::string& data, TaskbarManager& tb) {
 			tb.deleteFromObserved(deleteFromObserved);
 
 			std::set<Handle> addToObserved;
-			rapidjson::Value& addToObservedJson = value["addToObserved"];
-			if (addToObservedJson.GetArray().Size()) {
-				for (const auto& handleJson : value["addToObserved"].GetArray()) {
-					addToObserved.insert(reinterpret_cast<Handle>(handleJson.GetInt64()));
-				}
-				sendResponse(tb.addToObserved(addToObserved), id);
+			for (const auto& handleJson : value["addToObserved"].GetArray()) {
+				addToObserved.insert(reinterpret_cast<Handle>(handleJson.GetInt64()));
 			}
+
+			postResponse(id, tb.addToObserved(addToObserved));
 		}
 		else if (type == "getArrangement") {
 			if (value.IsString() && value.GetString() == std::string("all")) {
-				sendResponse(tb.getArrangement(), id);
+				postResponse(id, tb.getArrangement());
 			}
 			else {
 				std::set<Handle> handleSet;
 				for (auto it = value.Begin(); it != value.End(); ++it)
 					handleSet.insert(reinterpret_cast<Handle>(it->GetInt64()));
-				sendResponse(tb.getArrangement(handleSet), id);
+				postResponse(id, tb.getArrangement(handleSet));
 			}
 		}
 		else if (type == "setArrangement") {
