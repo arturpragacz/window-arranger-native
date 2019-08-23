@@ -35,6 +35,9 @@ public:
 template <typename T>
 void TTLibWrapper::forEach(T callback) {
 	TTLibWrapper::ButtonInfo bi{};
+
+	if (!TTLib_ManipulationStart())
+		throw Exception{ EXCEPTION_STRING + " TTLib_ManipulationStart" };
 	bi.taskbar = TTLib_GetMainTaskbar();
 	if (bi.taskbar == NULL)
 		throw Exception{ EXCEPTION_STRING + " TTLib_GetMainTaskbar" };
@@ -69,6 +72,8 @@ void TTLibWrapper::forEach(T callback) {
 			callback(bi);
 		}
 	}
+
+	TTLib_ManipulationEnd();
 }
 
 

@@ -15,13 +15,15 @@
 #define WM_NEW_TEXT_INPUT WM_USER
 //#define WM_WINDOWS_POSITIONS_CHANGED WM_USER+1
 
+#define ERROR_EXIT __COUNTER__+1
+
 static void log(const std::string& s) {
 	static std::ofstream f("logmy.txt");//TODO
 	f << s << std::endl;
 	f.flush();
 }
 
-static int error(int e, const std::string& s) {
+static int error(const std::string& s, int e = 0) {
 	log("ERROR: " + s);
 	return e;
 }
@@ -52,6 +54,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	UNREFERENCED_PARAMETER(nCmdShow);
 
 	try {
+		std::ios::sync_with_stdio();
 		TaskbarManager tb;
 
 		static auto parentThreadNativeId = GetCurrentThreadId();
@@ -83,7 +86,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 				{
 					std::string* data = (std::string*)msg.wParam;
 					if (processMessage(*data, tb))
-						continue;
+						return ERROR_EXIT;
 					delete data;
 				}
 				break;
@@ -108,10 +111,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 		return (int)msg.wParam;
 	}
 	catch (TaskbarManager::Exception& e) {
-		return error(1, "TaskbarManager: " + e.str);
+		return error("TaskbarManager: " + e.str, ERROR_EXIT);
 	}
 	catch (Timer::Exception& ) {
-		return error(2, "can't create timer");
+		return error("can't create timer", ERROR_EXIT);
 	}
 
 	// never should be here!
@@ -120,8 +123,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 static void postMessage(const std::string& message) {
 	uint32_t size = static_cast<uint32_t>(message.length());
-	std::cout << size;
-	std::cout << message;
+	std::cout.write(reinterpret_cast<char*>(&size), sizeof size);
+	std::cout.write(&message[0], size);
+	std::cout.flush();
 }
 
 //rapidjson::Document createResponseJsonDoc(int id, const std::string& status) {
@@ -135,19 +139,26 @@ static void postMessage(const std::string& message) {
 //	return d;
 //}
 
-struct NoPreValue { void toJson(rapidjson::MemoryPoolAllocator<>& allocator) {} };
+struct NoPreValue {
+	int toJson(rapidjson::MemoryPoolAllocator<>& allocator) { return 1; }
+};
 template <class T = NoPreValue>
 static void postResponse(int id, const std::string& status = "OK", T preValue = T()) {
-	rapidjson::Document d;
-
-	d["source"].SetString("browser");
-	d["id"].SetInt(id);
-	d["type"].SetString("response");
-	d["status"].SetString(status, d.GetAllocator());
+	rapidjson::Document d(rapidjson::kObjectType);
+	auto& allctr = d.GetAllocator();
+		
+	d.AddMember("source", "browser", allctr)
+		.AddMember("id", id, allctr)
+		.AddMember("type", "response", allctr)
+		.AddMember("status", status, allctr);
+	//d["source"].SetString("browser");
+	//d["id"].SetInt(id);
+	//d["type"].SetString("response");
+	//d["status"].SetString(status, d.GetAllocator());
 
 	if (std::negation_v<std::is_same<T, NoPreValue>>)
-		d["value"] = preValue.toJson(d.GetAllocator());
-	//d.AddMember("value", value, d.GetAllocator());
+		//d["value"] = preValue.toJson(d.GetAllocator());
+	d.AddMember("value", preValue.toJson(allctr), allctr);
 
 	rapidjson::StringBuffer buffer;
 	rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
@@ -161,6 +172,7 @@ static void postResponse(int id, T preValue) {
 }
 
 static int processMessage(const std::string& data, TaskbarManager& tb) {
+	using namespace std::string_literals;
 	rapidjson::Document d;
 	if (d.Parse(data.c_str()).HasParseError())
 		return 1;
@@ -171,33 +183,43 @@ static int processMessage(const std::string& data, TaskbarManager& tb) {
 	rapidjson::Value& value = d["value"];
 
 	if (source == "browser") {
-		if (type == "changeObserved") {
-			std::vector<Handle> deleteFromObserved;
-			for (const auto& handleJson : value["deleteFromObserved"].GetArray()) {
-				deleteFromObserved.push_back(reinterpret_cast<Handle>(handleJson.GetInt64()));
-			}
-			tb.deleteFromObserved(deleteFromObserved);
+		try {
+			if (type == "changeObserved") {
+				std::vector<Handle> deleteFromObserved;
+				for (const auto& handleJson : value["deleteFromObserved"].GetArray()) {
+					deleteFromObserved.push_back(reinterpret_cast<Handle>(handleJson.GetInt64()));
+				}
+				tb.deleteFromObserved(deleteFromObserved);
 
-			std::set<Handle> addToObserved;
-			for (const auto& handleJson : value["addToObserved"].GetArray()) {
-				addToObserved.insert(reinterpret_cast<Handle>(handleJson.GetInt64()));
-			}
+				std::set<Handle> addToObserved;
+				for (const auto& handleJson : value["addToObserved"].GetArray()) {
+					addToObserved.insert(reinterpret_cast<Handle>(handleJson.GetInt64()));
+				}
 
-			postResponse(id, tb.addToObserved(addToObserved));
-		}
-		else if (type == "getArrangement") {
-			if (value.IsString() && value.GetString() == std::string("all")) {
-				postResponse(id, tb.getArrangement());
+				postResponse(id, tb.addToObserved(addToObserved));
+			}
+			else if (type == "getArrangement") {
+				if (value.IsString() && value.GetString() == std::string("all")) {
+					postResponse(id, tb.getArrangement());
+				}
+				else {
+					std::set<Handle> handleSet;
+					for (auto it = value.Begin(); it != value.End(); ++it)
+						handleSet.insert(reinterpret_cast<Handle>(it->GetInt64()));
+					postResponse(id, tb.getArrangement(handleSet));
+				}
+			}
+			else if (type == "setArrangement") {
+				tb.setArrangement(Arrangement(value));
+				postResponse(id);
 			}
 			else {
-				std::set<Handle> handleSet;
-				for (auto it = value.Begin(); it != value.End(); ++it)
-					handleSet.insert(reinterpret_cast<Handle>(it->GetInt64()));
-				postResponse(id, tb.getArrangement(handleSet));
+				postResponse(id, "WRONG_TYPE"s);
 			}
 		}
-		else if (type == "setArrangement") {
-			tb.setArrangement(Arrangement(value));
+		catch (TaskbarManager::Exception& e) {
+			error("TaskbarManager: " + e.str);
+			return 1;
 		}
 	}
 

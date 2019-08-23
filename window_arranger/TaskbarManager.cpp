@@ -20,16 +20,21 @@ TaskbarManager::~TaskbarManager() {
 
 Arrangement TaskbarManager::addToObserved(const std::set<Handle>& handleSet) {
 	Arrangement arrangement;
-	ttl.forEach([this, &handleSet, &arrangement](const TTLibWrapper::ButtonInfo& bi) {
-		if (handleSet.find(bi.buttonWindow) != handleSet.end()) {
-			auto positionIt = observed.find(bi.buttonWindow);
-			if (positionIt == observed.end()) {
-				std::pair<Handle, Position> pair(bi.buttonWindow, Position(bi.appId, bi.buttonIndex));
-				observed.insert(pair);
-				arrangement.insert(pair);
+	try {
+		ttl.forEach([this, &handleSet, &arrangement](const TTLibWrapper::ButtonInfo& bi) {
+			if (handleSet.find(bi.buttonWindow) != handleSet.end()) {
+				auto positionIt = observed.find(bi.buttonWindow);
+				if (positionIt == observed.end()) {
+					std::pair<Handle, Position> pair(bi.buttonWindow, Position(bi.appId, bi.buttonIndex));
+					observed.insert(pair);
+					arrangement.insert(pair);
+				}
 			}
-		}
-	});
+		});
+	}
+	catch (const TTLibWrapper::Exception& e) {
+		throw Exception{ EXCEPTION_STRING + " | " + e.str };
+	}
 	return arrangement;
 }
 
@@ -49,16 +54,21 @@ Arrangement TaskbarManager::getArrangement(const std::set<Handle>& handleSet) {
 
 Arrangement TaskbarManager::getArrangement(bool all, const std::set<Handle>* handleSetPtr) {
 	Arrangement arrangement;
-	ttl.forEach([this, all, handleSetPtr, &arrangement](const TTLibWrapper::ButtonInfo& bi) {
-		if (all || handleSetPtr->find(bi.buttonWindow) != handleSetPtr->end()) {
-			auto positionIt = observed.find(bi.buttonWindow);
-			if (positionIt != observed.end()) {
-				Position& position = positionIt->second;
-				position.update(bi.appId, bi.buttonIndex);
-				arrangement.insert(std::pair<Handle, Position>(bi.buttonWindow, position));
+	try {
+		ttl.forEach([this, all, handleSetPtr, &arrangement](const TTLibWrapper::ButtonInfo& bi) {
+			if (all || handleSetPtr->find(bi.buttonWindow) != handleSetPtr->end()) {
+				auto positionIt = observed.find(bi.buttonWindow);
+				if (positionIt != observed.end()) {
+					Position& position = positionIt->second;
+					position.update(bi.appId, bi.buttonIndex);
+					arrangement.insert(std::pair<Handle, Position>(bi.buttonWindow, position));
+				}
 			}
-		}
-	});
+		});
+	}
+	catch (const TTLibWrapper::Exception& e) {
+		throw Exception{ EXCEPTION_STRING + " | " + e.str };
+	}
 	return arrangement;
 }
 
