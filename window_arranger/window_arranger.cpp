@@ -60,10 +60,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 		static auto parentThreadNativeId = GetCurrentThreadId();
 
 		std::thread reader([] {
-			uint32_t size = 0; int i = 3; //TODO
+			uint32_t size = 0;
 			while (std::cin.read(reinterpret_cast<char*>(&size), sizeof size)) {
-				if(i--<0) break; //TODO
-				log(size);
 				auto data = new std::string(size, '\0');
 
 				if (std::cin.read(&(*data)[0], size)) {
@@ -210,7 +208,7 @@ static int processMessage(const std::string& data, TaskbarManager& tb) {
 				}
 			}
 			else if (type == "setArrangement") {
-				tb.setArrangement(Arrangement(value));
+				//tb.setArrangement(Arrangement(value));
 				postResponse(id);
 			}
 			else {
@@ -272,7 +270,6 @@ static int processMessage(const std::string& data, TaskbarManager& tb) {
 //				{
 //						PAINTSTRUCT ps;
 //						HDC hdc = BeginPaint(hWnd, &ps);
-//						// TODO: Add any drawing code that uses hdc here...
 //						EndPaint(hWnd, &ps);
 //				}
 //				break;

@@ -25,11 +25,12 @@ Arrangement TaskbarManager::addToObserved(const std::set<Handle>& handleSet) {
 			if (handleSet.find(bi.buttonWindow) != handleSet.end()) {
 				auto positionIt = observed.find(bi.buttonWindow);
 				if (positionIt == observed.end()) {
-					std::pair<Handle, Position> pair(bi.buttonWindow, Position(bi.appId, bi.buttonIndex));
+					std::pair<Handle, Position> pair(bi.buttonWindow, Position(bi.group.appId, bi.buttonIndex));
 					observed.insert(pair);
 					arrangement.insert(pair);
 				}
 			}
+			return true; //TODO: better conditional
 		});
 	}
 	catch (const TTLibWrapper::Exception& e) {
@@ -60,10 +61,11 @@ Arrangement TaskbarManager::getArrangement(bool all, const std::set<Handle>* han
 				auto positionIt = observed.find(bi.buttonWindow);
 				if (positionIt != observed.end()) {
 					Position& position = positionIt->second;
-					position.update(bi.appId, bi.buttonIndex);
+					position.update(bi.group.appId, bi.buttonIndex);
 					arrangement.insert(std::pair<Handle, Position>(bi.buttonWindow, position));
 				}
 			}
+			return true; //TODO: better conditional
 		});
 	}
 	catch (const TTLibWrapper::Exception& e) {
@@ -72,20 +74,42 @@ Arrangement TaskbarManager::getArrangement(bool all, const std::set<Handle>* han
 	return arrangement;
 }
 
-//TODO
-int TaskbarManager::setArrangement(const Arrangement& arrangement) {
-	//ttl.forEach([this, &arrangement](const TTLibWrapper::ButtonInfo& bi) {
-	//	if (handleSet.find(bi.buttonWindow) != handleSet.end()) {
-	//		auto positionIt = observed.find(bi.buttonWindow);
-	//		if (positionIt == observed.end()) {
-	//			std::pair<Handle, Position> pair(bi.buttonWindow, Position(bi.appId, bi.buttonIndex));
-	//			observed.insert(pair);
-	//			arrangement.insert(pair);
-	//		}
-	//	}
-	//});
-	return 0;
-}
+//TODO: przenoszenie tak¿e miêdzy appId
+//Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
+//	Arrangement changed;
+//	auto organizedDestination = destination.organize();
+//	try {
+//		ttl.forEach(
+//			[this, &changed, &organizedDestination](const TTLibWrapper::ButtonGroupInfo& bgi) {
+//				auto intraWindowGroupIt = organizedDestination.find(bgi.appId);
+//				if (intraWindowGroupIt != organizedDestination.end()) {
+//					auto& vectorOfPosWindows = intraWindowGroupIt->second;
+//
+//
+//					return true;
+//				}
+//				else
+//					return false;
+//			},
+//			[this, &organizedDestination](const TTLibWrapper::ButtonInfo& bi) {
+//			auto arrPositionIt = destination.find(bi.buttonWindow);
+//			if (arrPositionIt == destination.end())
+//				return;
+//			auto obsPositionIt = observed.find(bi.buttonWindow);
+//			if (obsPositionIt == observed.end())
+//				return;
+//
+//			//if (bi.appId != (*arrPositionIt).second.wAppId)
+//			auto destinationIndex = (*arrPositionIt).second.index;
+//			if (bi.buttonIndex != destinationIndex)
+//				ttl.buttonMoveInButtonGroup(bi.buttonGroup, bi.buttonIndex, destinationIndex);
+//		});
+//	}
+//	catch (const TTLibWrapper::Exception& e) {
+//		throw Exception{ EXCEPTION_STRING + " | " + e.str };
+//	}
+//	return 0;
+//}
 
 //TODO
 int TaskbarManager::updateObserved() {

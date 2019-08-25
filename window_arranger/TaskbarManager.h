@@ -10,7 +10,6 @@
 #define EXCEPTION_STRING CLASSNAME + "::" + __func__
 
 class TaskbarManager {
-
 private:
 	static const std::string CLASSNAME;
 	Arrangement observed;
@@ -24,7 +23,7 @@ public:
 	void deleteFromObserved(const std::vector<Handle>& handles);
 	Arrangement getArrangement();
 	Arrangement getArrangement(const std::set<Handle>& handleSet);
-	int setArrangement(const Arrangement& arrangement);
+	//Arrangement setArrangement(const Arrangement& arrangement);
 	int updateObserved();
 
 	struct Exception { std::string str; };
