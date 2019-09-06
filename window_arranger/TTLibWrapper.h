@@ -19,26 +19,29 @@ private:
 public:
 	struct ButtonGroupInfo {
 		HANDLE taskbar;
-		HANDLE buttonGroup;
+		int index;
+		HANDLE handle;
 		std::string appId;
 		int buttonCount;
 	};
 	struct ButtonInfo {
-		ButtonGroupInfo group;
-		int buttonIndex;
-		HANDLE button;
-		HWND buttonWindow;
+		const ButtonGroupInfo& group;
+		int index;
+		HANDLE handle;
+		HWND windowHandle;
+
+		ButtonInfo(const ButtonGroupInfo& g) : group(g) {}
 	};
 
 	TTLibWrapper();
 	~TTLibWrapper();
 
-	static std::function<bool(const ButtonGroupInfo&)> Noop;
+	template <typename T> void forEachGroup(T callback) const;
+	template <typename T> bool forEachInGroup(const TTLibWrapper::ButtonGroupInfo& bgi, T callback) const;
 	template <typename T> void forEach(T callback) const;
-	template <typename T, typename T1, typename T2>
-		void forEach(T1 groupPreCallback, T callback, T2 groupPostCallback) const;
 
 	bool setWindowAppId(HWND hWnd, const std::string& appId) const;
+	bool moveButtonInGroup(const ButtonGroupInfo& bgi, int indexFrom, int indexTo);
 
 	struct Exception { std::string str; };
 
@@ -61,15 +64,11 @@ private:
 	}
 };
 
-template <typename T> void TTLibWrapper::forEach(T callback) const {
-	forEach<T&>(Noop, callback, Noop);
-}
-
 //void (*callback)(const TTLibWrapper::ButtonInfo&))
-template <typename T, typename T1, typename T2>
-void TTLibWrapper::forEach(T1 groupPreCallback, T callback, T2 groupPostCallback) const {
-	TTLibWrapper::ButtonInfo bi{};
-	TTLibWrapper::ButtonGroupInfo& bgi = bi.group;
+
+template <typename T>
+void TTLibWrapper::forEachGroup(T callback) const {
+	TTLibWrapper::ButtonGroupInfo bgi;
 
 	if (!TTLib_ManipulationStart())
 		throw Exception{ EXCEPTION_STRING + " TTLib_ManipulationStart" };
@@ -83,39 +82,51 @@ void TTLibWrapper::forEach(T1 groupPreCallback, T callback, T2 groupPostCallback
 
 	WCHAR tmpAppId[MAX_APPID_LENGTH];
 	for (int i = 0; i < buttonGroupCount; ++i) {
-		bgi.buttonGroup = TTLib_GetButtonGroup(bgi.taskbar, i);
-		if (bgi.buttonGroup == NULL)
-			throw Exception{ EXCEPTION_STRING + " TTLib_GetButtonGroup: " + to_string(i) };
+		bgi.index = i;
+		bgi.handle = TTLib_GetButtonGroup(bgi.taskbar, i);
+		if (bgi.handle == NULL)
+			throw Exception{ EXCEPTION_STRING + " TTLib_GetButtonGroup: " + to_string(bgi.index) };
 
-		SIZE_T length = TTLib_GetButtonGroupAppId(bgi.buttonGroup, tmpAppId, MAX_APPID_LENGTH);
+		SIZE_T length = TTLib_GetButtonGroupAppId(bgi.handle, tmpAppId, MAX_APPID_LENGTH);
 		bgi.appId = convertToUTF8(tmpAppId);
 
-		int buttonCount;
-		if (!TTLib_GetButtonCount(bgi.buttonGroup, &buttonCount))
-			throw Exception{ EXCEPTION_STRING + " TTLib_GetButtonCount: " + to_string(i) };
+		if (!TTLib_GetButtonCount(bgi.handle, &bgi.buttonCount))
+			throw Exception{ EXCEPTION_STRING + " TTLib_GetButtonCount: " + to_string(bgi.index) };
 
-		if (groupPreCallback(bgi))
-			for (int j = 0; j < buttonCount; ++j) {
-				bi.buttonIndex = j;
-				bi.button = TTLib_GetButton(bgi.buttonGroup, j);
-				if (bi.button == NULL)
-					throw Exception{ EXCEPTION_STRING + " TTLib_GetButton: " + to_string(i) + " " + to_string(j) };
-
-				bi.buttonWindow = TTLib_GetButtonWindow(bi.button);
-				if (bi.buttonWindow == NULL)
-					throw Exception{ EXCEPTION_STRING + " TTLib_GetButton: " + to_string(i) + " " + to_string(j) };
-
-				if (!callback(bi))
-					break;
-			}
-
-		if (!groupPostCallback(bgi))
+		if (!callback(bgi))
 			break;
 	}
 
 	TTLib_ManipulationEnd();
 }
 
+template <typename T>
+bool TTLibWrapper::forEachInGroup(const TTLibWrapper::ButtonGroupInfo& bgi, T callback) const {
+	TTLibWrapper::ButtonInfo bi(bgi);
+
+	int buttonCount = bgi.buttonCount;
+	for (int i = 0; i < buttonCount; ++i) {
+		bi.index = i;
+		bi.handle = TTLib_GetButton(bgi.handle, i);
+		if (bi.handle == NULL)
+			throw Exception{ EXCEPTION_STRING + " TTLib_GetButton: " + to_string(bgi.index) + " " + to_string(bi.index) };
+
+		bi.windowHandle = TTLib_GetButtonWindow(bi.handle);
+		if (bi.windowHandle == NULL)
+			throw Exception{ EXCEPTION_STRING + " TTLib_GetButton: " + to_string(bgi.index) + " " + to_string(bi.index) };
+
+		if (!callback(bi))
+			break;
+	}
+
+	return true;
+}
+
+template <typename T>
+void TTLibWrapper::forEach(T callback) const {
+	using namespace std::placeholders;
+	forEachGroup(std::bind(&TTLibWrapper::forEachInGroup<T>, this, _1, callback));
+}
 
 //#undef TTLIBWRAPPER_H_INSIDE
 //#endif //TTLIBWRAPPER_H

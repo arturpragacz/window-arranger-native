@@ -1,14 +1,10 @@
 #include "pch.h"
 #include "TTLibWrapper.h"
 
-#include <shlwapi.h>
 #include <propsys.h>
 #include <propkey.h>
-//#include <shlwapi.h>
 
 const std::string TTLibWrapper::CLASSNAME = "TTLibWrapper";
-
-std::function<bool(const TTLibWrapper::ButtonGroupInfo&)> TTLibWrapper::Noop = [](const ButtonGroupInfo&) { return true; };
 
 TTLibWrapper::TTLibWrapper() {
 	DWORD dwError = TTLib_Init();
@@ -50,6 +46,13 @@ bool TTLibWrapper::setWindowAppId(HWND hWnd, const std::string& appId) const {
 
 		return SUCCEEDED(hr);
 	}
+	else
+		return false;
+}
+
+bool TTLibWrapper::moveButtonInGroup(const ButtonGroupInfo& bgi, int indexFrom, int indexTo) {
+	if (indexTo >= 0 && indexTo < bgi.buttonCount && indexFrom >= 0 && indexFrom < bgi.buttonCount)
+		return TTLib_ButtonMoveInButtonGroup(bgi.handle, indexFrom, indexTo);
 	else
 		return false;
 }

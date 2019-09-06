@@ -7,26 +7,58 @@
 #include <vector>
 #include <algorithm>
 
-using Handle = HANDLE;
+using WindowHandle = HWND;
 
 class Position {
 public:
 	friend class Arrangement;
-	Position() : index(-1) {};
-	Position(const std::string& appId, int index) : appId(appId), index(index) {}
+	friend class TaskbarManager; //TODO: better solution to the problem of accessing private variables (getters)
+	Position() : hasDefaultAppId(true), index(-1) {};
+	Position(int index) : hasDefaultAppId(true), index(index) {}
+	Position(const std::string& appId, int index) : hasDefaultAppId(false), appId(appId), index(index) {}
 	Position(const rapidjson::Value& value)
-		: appId(value["group"].GetString()), index(value["index"].GetInt()) {}
+		: hasDefaultAppId(value["inDefaultGroup"].GetBool()), index(value["index"].GetInt()) {
+		if (!hasDefaultAppId)
+			appId = value["group"].GetString();
+	}
 
 	rapidjson::Value toJson(rapidjson::MemoryPoolAllocator<>& allocator) const {
-		return std::move(rapidjson::Value(rapidjson::kObjectType)
-			.AddMember("group", appId, allocator)
-			.AddMember("index", index, allocator));
+		rapidjson::Value value(rapidjson::kObjectType);
+		value.AddMember("inDefaultGroup", hasDefaultAppId, allocator);
+		if (!this->hasDefaultAppId)
+			value.AddMember("group", appId, allocator);
+		value.AddMember("index", index, allocator);
+		return value;
 	}
-	bool update(const std::string& newAppId, int newIndex) {
+	bool update(bool newAppIdDefault, const std::string& newAppId, int newIndex) {
 		bool updated = false;
-		if (updateAppId(newAppId)) {
+
+		if (this->hasDefaultAppId != newAppIdDefault) {
+			this->hasDefaultAppId = newAppIdDefault;
 			updated = true;
 		}
+
+		if (this->hasDefaultAppId) {
+			this->appId.clear();
+		}
+		else {
+			if (this->appId != newAppId) {
+				this->appId = newAppId;
+				updated = true;
+			}
+		}
+
+		if (this->index != newIndex) {
+			this->index = newIndex;
+			updated = true;
+		}
+		return updated;
+	}
+	bool update(const std::string& newAppId, int newIndex) {
+		return update(false, newAppId, newIndex);
+	}
+	bool update(int newIndex) {
+		bool updated = false;
 		if (this->index != newIndex) {
 			this->index = newIndex;
 			updated = true;
@@ -47,51 +79,53 @@ public:
 	//}
 
 private:
+	bool hasDefaultAppId;
 	std::string appId;
 	int index;
-	bool updateAppId(const std::string& newAppId) {
-		if (this->appId != newAppId) {
-			this->appId = newAppId;
-			//convertToUTF16(); TODOs
-			return true;
-		}
-		return false;
-	}
 };
 
-class Arrangement : public std::map<Handle, Position> {
+class Arrangement : public std::map<WindowHandle, Position> {
 public:
 	Arrangement() = default;
 	Arrangement(const rapidjson::Value& value) {
 		for (const auto& posWindowJson : value.GetArray()) {
+			WindowHandle convertCStringToWindowHandle(const char* str); // deklaracja funkcji z window_arranger.cpp
 			this->insert(
-				std::pair<Handle, Position>(
-					reinterpret_cast<Handle>(posWindowJson["handle"].GetInt64()), // TODO: cast from string to int64
+				std::pair<WindowHandle, Position>(
+					convertCStringToWindowHandle(posWindowJson["handle"].GetString()),
 					Position(posWindowJson["position"])
 				)
 			);
 		}
 	}
 
+	operator bool() const {
+		return !map::empty();
+	}
+
 	rapidjson::Value toJson(rapidjson::MemoryPoolAllocator<>& allocator) const {
 		rapidjson::Value value(rapidjson::kArrayType);
 		for (const auto& posWindow : *this) {
+			std::string convertWindowHandleToString(WindowHandle wh); // deklaracja funkcji z window_arranger.cpp
 			value.PushBack(
 				rapidjson::Value(rapidjson::kObjectType)
-					.AddMember("handle", reinterpret_cast<int64_t>(posWindow.first), allocator) // TODO: cast from int64 to string "0x<num>"
+					.AddMember("handle", convertWindowHandleToString(posWindow.first), allocator)
 					.AddMember("position", posWindow.second.toJson(allocator), allocator),
 				allocator
 			);
 		}
 		return value;
 	}
-	auto organize() const {
-		std::map<std::string, std::vector<const map::value_type*>> organized;
-		for (const auto& posWindow : *this) {
-			auto intraWindowGroupIt = organized.find(posWindow.second.appId);
 
-			if (intraWindowGroupIt != organized.end()) {
-				auto& vectorOfPosWindows = intraWindowGroupIt->second;
+	//auto organizeByGroupVectorSortedByWindowHandle() const {
+	auto organizeByGroupVector() const {
+		typedef std::vector<const map::value_type*> WindowGroupArray;
+		std::map<std::string, WindowGroupArray> organized;
+		for (const auto& posWindow : *this) {
+			auto organizedWindowGroupIt = organized.find(posWindow.second.appId);
+
+			if (organizedWindowGroupIt != organized.end()) {
+				auto& vectorOfPosWindows = organizedWindowGroupIt->second;
 				vectorOfPosWindows.push_back(&posWindow);
 			}
 			else {
@@ -99,15 +133,32 @@ public:
 			}
 		}
 
-		for (auto& windowGroup : organized) {
-			auto& vectorOfPosWindows = windowGroup.second;
-			std::sort(vectorOfPosWindows.begin(), vectorOfPosWindows.end(),
-				[](const map::value_type* posWindow1Ptr, const map::value_type* posWindow2Ptr) {
-					return posWindow1Ptr->second.index < posWindow2Ptr->second.index;
-				}
-			);
-		}
+		//for (auto& windowGroup : organized) {
+		//	auto& vectorOfPosWindows = windowGroup.second;
+		//	std::sort(vectorOfPosWindows.begin(), vectorOfPosWindows.end(),
+		//		[](const map::value_type* posWindow1Ptr, const map::value_type* posWindow2Ptr) {
+		//			return posWindow1Ptr->first < posWindow2Ptr->first;
+		//		}
+		//	);
+		//}
 
+		return organized;
+	}
+
+	auto organizeByGroup() const {
+		typedef std::map<map::key_type, const map::mapped_type*> WindowGroup;
+		std::map<std::string, WindowGroup> organized;
+		for (const auto& posWindow : *this) {
+			auto organizedWindowGroupIt = organized.find(posWindow.second.appId);
+
+			if (organizedWindowGroupIt != organized.end()) {
+				auto& mapOfPosWindows = organizedWindowGroupIt->second;
+				mapOfPosWindows.insert(std::pair(posWindow.first, &posWindow.second));
+			}
+			else {
+				organized.insert(std::pair(posWindow.second.appId, WindowGroup { std::pair(posWindow.first, &posWindow.second) }));
+			}
+		}
 		return organized;
 	}
 };
