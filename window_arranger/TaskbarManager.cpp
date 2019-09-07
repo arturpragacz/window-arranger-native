@@ -177,7 +177,27 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 						}
 					);
 
-					// TODO: normalizuj indeksy
+					// normalizujemy indeksy (gdy s¹ za du¿e)
+					std::vector<std::remove_const_t<DestinationType>> changedDestinations;
+					changedDestinations.reserve(posWindows.size());
+					{
+						int maxDestinationIndex = bgi.buttonCount - 1;
+						int i = 0;
+						for (auto& posWindow : posWindows) {
+							int destinationIndex = posWindow.destination->second.index;
+							if (destinationIndex > maxDestinationIndex) {
+								destinationIndex = maxDestinationIndex;
+								Position normalizedPos = posWindow.destination->second;
+								normalizedPos.update(destinationIndex);
+								changedDestinations.push_back(
+									DestinationType(posWindow.destination->first, std::move(normalizedPos)));
+								posWindow.destination = &changedDestinations[i];
+								i += 1;
+							}
+
+							maxDestinationIndex = destinationIndex - 1;
+						}
+					}
 
 					// przestawiamy okna, uaktualniaj¹c na bie¿¹co ich pozycjê w [order]
 					for (const auto& posWindow : posWindows) {

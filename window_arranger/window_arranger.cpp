@@ -192,6 +192,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	UNREFERENCED_PARAMETER(lpCmdLine);
 	UNREFERENCED_PARAMETER(nCmdShow);
 
+	log("START");
 	// TODO: check extension ID!
 
 	try {
@@ -201,7 +202,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 		static auto parentThreadNativeId = GetCurrentThreadId();
 
 		std::thread reader([] {
-			uint32_t size = 0;
+			uint32_t size = 0; 
 			while (std::cin.read(reinterpret_cast<char*>(&size), sizeof size)) {
 				auto data = new std::string(size, '\0');
 
