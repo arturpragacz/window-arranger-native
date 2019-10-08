@@ -9,6 +9,8 @@
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
 
+#include <io.h>
+#include <fcntl.h>
 #include <fstream>
 #include <thread>
 #include <sstream>
@@ -18,14 +20,14 @@
 
 #define ERROR_EXIT __COUNTER__+1
 
-static void log(const std::string& s) {
+static void logg(const std::string& s) {
 	static std::ofstream f("logmy.txt");//TODO better logging
 	f << s << std::endl;
 	f.flush();
 }
 
 static int error(const std::string& s, int e = 0) {
-	log("ERROR: " + s);
+	logg("ERROR: " + s);
 	return e;
 }
 
@@ -182,6 +184,7 @@ public:
 	struct Exception {};
 };
 
+// TODO: better error handling
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	_In_opt_ HINSTANCE hPrevInstance,
 	_In_ LPWSTR    lpCmdLine,
@@ -192,11 +195,17 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	UNREFERENCED_PARAMETER(lpCmdLine);
 	UNREFERENCED_PARAMETER(nCmdShow);
 
-	log("START");
-	// TODO: check extension ID!
+	logg("START");
 
 	try {
+		std::FILE* standardStreams[] = {stdin, stdout, stderr};
+		for (auto& stream : standardStreams) {
+			int fileDescriptor = _fileno(stream);
+			if (_setmode(fileDescriptor, _O_BINARY) == -1)
+				return error("Can't set binary mode of file descriptor: " + std::to_string(fileDescriptor), ERROR_EXIT);
+		}
 		std::ios::sync_with_stdio();
+
 		TaskbarManager tbm;
 
 		static auto parentThreadNativeId = GetCurrentThreadId();
@@ -213,6 +222,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 					}
 				}
 			}
+			logg("Extracted in last operation: " + std::to_string(std::cin.gcount()));
+			logg("Flags after last operation: " + std::to_string(std::cin.rdstate()));
 			PostThreadMessage(parentThreadNativeId, WM_QUIT,
 				(WPARAM)0, (LPARAM)0);
 		});
@@ -243,7 +254,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 			default:
 			{
-				log("other message: " + std::to_string(msg.message));
+				logg("other message: " + std::to_string(msg.message));
 			}
 
 			}
@@ -254,7 +265,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 		reader.join();
 
-		log("END");
+		logg("END");
 		return (int)msg.wParam;
 	}
 	catch (TaskbarManager::Exception& e) {
