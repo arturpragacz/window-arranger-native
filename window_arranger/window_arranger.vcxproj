@@ -191,7 +191,9 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="TaskbarManager.h" />
+    <ClInclude Include="Timer.h" />
     <ClInclude Include="TTLibWrapper.h" />
+    <ClInclude Include="utils.h" />
     <ClInclude Include="window_arranger.h" />
   </ItemGroup>
   <ItemGroup>

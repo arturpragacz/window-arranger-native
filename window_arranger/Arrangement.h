@@ -1,5 +1,7 @@
 #pragma once
 
+#include "utils.h"
+
 #define RAPIDJSON_HAS_STDSTRING 1
 #include <rapidjson/document.h>
 
@@ -7,55 +9,106 @@
 #include <vector>
 #include <algorithm>
 
-using WindowHandle = HWND;
+class WindowGroup {
+private:
+	bool defGroup;
+	std::string name;
 
-class Position {
 public:
-	friend class Arrangement;
-	friend class TaskbarManager; //TODO: better solution to the problem of accessing private variables (getters)
-	Position() : hasDefaultAppId(true), index(-1) {};
-	Position(int index) : hasDefaultAppId(true), index(index) {}
-	Position(const std::string& appId, int index) : hasDefaultAppId(false), appId(appId), index(index) {}
-	Position(const rapidjson::Value& value)
-		: hasDefaultAppId(value["inDefaultGroup"].GetBool()), index(value["index"].GetInt()) {
-		if (!hasDefaultAppId)
-			appId = value["group"].GetString();
+	WindowGroup() : defGroup(true) {}
+	explicit WindowGroup(std::string_view nm) {
+		if (nm == DEFAULTGROUP) {
+			defGroup = true;
+		}
+		else {
+			defGroup = false;
+			name = nm;
+		}
+	}
+	explicit WindowGroup(const rapidjson::Value& value) : defGroup(value["defGroup"].GetBool()) {
+		if (!defGroup)
+			name = value["name"].GetString();
 	}
 
+	bool operator<(const WindowGroup& rhs) const {
+		if (defGroup != rhs.defGroup)
+			return defGroup;
+		else
+			return name < rhs.name;
+	}
+
+	std::string_view getName() const {
+		if (name == DEFAULTGROUP)
+			return DEFAULTGROUP;
+		else
+			return name;
+	}
+	bool isDefault() const {
+		return defGroup;
+	}
 	rapidjson::Value toJson(rapidjson::MemoryPoolAllocator<>& allocator) const {
 		rapidjson::Value value(rapidjson::kObjectType);
-		value.AddMember("inDefaultGroup", hasDefaultAppId, allocator);
-		if (!this->hasDefaultAppId)
-			value.AddMember("group", appId, allocator);
-		value.AddMember("index", index, allocator);
+		value.AddMember("defGroup", defGroup, allocator);
+		if (!defGroup)
+			value.AddMember("name", name, allocator);
 		return value;
 	}
-	bool update(bool newAppIdDefault, const std::string& newAppId, int newIndex) {
+
+	bool update(const WindowGroup& newGroup) {
 		bool updated = false;
 
-		if (this->hasDefaultAppId != newAppIdDefault) {
-			this->hasDefaultAppId = newAppIdDefault;
+		if (this->defGroup != newGroup.defGroup) {
+			this->defGroup = newGroup.defGroup;
 			updated = true;
 		}
 
-		if (this->hasDefaultAppId) {
-			this->appId.clear();
+		if (this->defGroup) {
+			this->name.clear();
 		}
 		else {
-			if (this->appId != newAppId) {
-				this->appId = newAppId;
+			if (this->name != newGroup.name) {
+				this->name = name;
 				updated = true;
 			}
 		}
 
-		if (this->index != newIndex) {
-			this->index = newIndex;
-			updated = true;
-		}
 		return updated;
 	}
-	bool update(const std::string& newAppId, int newIndex) {
-		return update(false, newAppId, newIndex);
+};
+
+class Position {
+private:
+	int index;
+	WindowGroup group;
+
+public:
+	Position() : group(), index(-1) {}
+	explicit Position(int index) : group(), index(index) {}
+	Position(const WindowGroup& group, int index) : group(group), index(index) {}
+	explicit Position(const rapidjson::Value& value)
+		: group(value["group"]), index(value["index"].GetInt()) {}
+
+	rapidjson::Value toJson(rapidjson::MemoryPoolAllocator<>& allocator) const {
+		rapidjson::Value value(rapidjson::kObjectType);
+		value.AddMember("group", group.toJson(allocator), allocator);
+		value.AddMember("index", index, allocator);
+		return value;
+	}
+
+	int getIndex() const {
+		return index;
+	}
+	const WindowGroup& getGroup() const {
+		return group;
+	}
+	bool update(const WindowGroup& newGroup, int newIndex) {
+		bool updated = false;
+		updated = update(newGroup) || updated;
+		updated = update(newIndex) || updated;
+		return updated;
+	}
+	bool update(const WindowGroup& newGroup) {
+		return group.update(newGroup);
 	}
 	bool update(int newIndex) {
 		bool updated = false;
@@ -65,23 +118,6 @@ public:
 		}
 		return updated;
 	}
-	//inline bool operator==(const Position& p) const {
-	//	return this->wAppId == p.wAppId && this->index == p.index;
-	//}
-	//inline bool operator!=(const Position& p) {
-	//	return !(*this == p);
-	//}
-	//bool isSameGroup(const Position& p) const {
-	//	return appId == p.appId;
-	//}
-	//bool isSameIndex(const Position& p) const {
-	//	return index == p.index;
-	//}
-
-private:
-	bool hasDefaultAppId;
-	std::string appId;
-	int index;
 };
 
 class Arrangement : public std::map<WindowHandle, Position> {
@@ -89,7 +125,6 @@ public:
 	Arrangement() = default;
 	Arrangement(const rapidjson::Value& value) {
 		for (const auto& posWindowJson : value.GetArray()) {
-			WindowHandle convertCStringToWindowHandle(const char* str); // deklaracja funkcji z window_arranger.cpp
 			this->insert(
 				std::pair<WindowHandle, Position>(
 					convertCStringToWindowHandle(posWindowJson["handle"].GetString()),
@@ -106,7 +141,6 @@ public:
 	rapidjson::Value toJson(rapidjson::MemoryPoolAllocator<>& allocator) const {
 		rapidjson::Value value(rapidjson::kArrayType);
 		for (const auto& posWindow : *this) {
-			std::string convertWindowHandleToString(WindowHandle wh); // deklaracja funkcji z window_arranger.cpp
 			value.PushBack(
 				rapidjson::Value(rapidjson::kObjectType)
 					.AddMember("handle", convertWindowHandleToString(posWindow.first), allocator)
@@ -117,46 +151,36 @@ public:
 		return value;
 	}
 
-	//auto organizeByGroupVectorSortedByWindowHandle() const {
-	auto organizeByGroupVector() const {
-		typedef std::vector<const map::value_type*> WindowGroupArray;
-		std::map<std::string, WindowGroupArray> organized;
+	auto organizeByGroup() const {
+		typedef std::vector<const map::value_type*> PosWindowVector;
+		std::map<WindowGroup, PosWindowVector> organized;
 		for (const auto& posWindow : *this) {
-			auto organizedWindowGroupIt = organized.find(posWindow.second.appId);
+			auto organizedWindowGroupIt = organized.find(posWindow.second.getGroup());
 
 			if (organizedWindowGroupIt != organized.end()) {
 				auto& vectorOfPosWindows = organizedWindowGroupIt->second;
 				vectorOfPosWindows.push_back(&posWindow);
 			}
 			else {
-				organized.insert(std::pair(posWindow.second.appId, std::vector<decltype(&posWindow)> { &posWindow }));
+				organized.insert(std::pair(posWindow.second.getGroup(), std::vector<decltype(&posWindow)> { &posWindow }));
 			}
 		}
-
-		//for (auto& windowGroup : organized) {
-		//	auto& vectorOfPosWindows = windowGroup.second;
-		//	std::sort(vectorOfPosWindows.begin(), vectorOfPosWindows.end(),
-		//		[](const map::value_type* posWindow1Ptr, const map::value_type* posWindow2Ptr) {
-		//			return posWindow1Ptr->first < posWindow2Ptr->first;
-		//		}
-		//	);
-		//}
 
 		return organized;
 	}
 
-	auto organizeByGroup() const {
-		typedef std::map<map::key_type, const map::mapped_type*> WindowGroup;
-		std::map<std::string, WindowGroup> organized;
+	auto organizeByGroupAndWindowHandle() const {
+		typedef std::map<map::key_type, const map::mapped_type*> PosWindowMap;
+		std::map<WindowGroup, PosWindowMap> organized;
 		for (const auto& posWindow : *this) {
-			auto organizedWindowGroupIt = organized.find(posWindow.second.appId);
+			auto organizedWindowGroupIt = organized.find(posWindow.second.getGroup());
 
 			if (organizedWindowGroupIt != organized.end()) {
 				auto& mapOfPosWindows = organizedWindowGroupIt->second;
 				mapOfPosWindows.insert(std::pair(posWindow.first, &posWindow.second));
 			}
 			else {
-				organized.insert(std::pair(posWindow.second.appId, WindowGroup { std::pair(posWindow.first, &posWindow.second) }));
+				organized.insert(std::pair(posWindow.second.getGroup(), PosWindowMap{ std::pair(posWindow.first, &posWindow.second) }));
 			}
 		}
 		return organized;

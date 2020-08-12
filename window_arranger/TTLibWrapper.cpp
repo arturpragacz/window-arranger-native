@@ -4,7 +4,9 @@
 #include <propsys.h>
 #include <propkey.h>
 
+
 const std::string TTLibWrapper::CLASSNAME = "TTLibWrapper";
+
 
 TTLibWrapper::TTLibWrapper() {
 	DWORD dwError = TTLib_Init();
@@ -25,7 +27,23 @@ TTLibWrapper::~TTLibWrapper() {
 }
 
 
-bool TTLibWrapper::setWindowAppId(HWND hWnd, const std::string& appId) const {
+void TTLibWrapper::lock() {
+	if (!locked) {
+		if (!TTLib_ManipulationStart())
+			throw Exception{ EXCEPTION_STRING + " TTLib_ManipulationStart" };
+		locked = true;
+	}
+}
+
+void TTLibWrapper::unlock() {
+	if (locked) {
+		TTLib_ManipulationEnd();
+		locked = false;
+	}
+}
+
+
+bool TTLibWrapper::setWindowAppId(HWND hWnd, std::string_view appId) const {
 	if (!appId.empty()) {
 		IPropertyStore *pps;
 		PROPVARIANT pv;
@@ -48,6 +66,25 @@ bool TTLibWrapper::setWindowAppId(HWND hWnd, const std::string& appId) const {
 	}
 	else
 		return false;
+}
+
+bool TTLibWrapper::resetWindowAppId(HWND hWnd) const {
+	IPropertyStore *pps;
+	PROPVARIANT pv;
+	HRESULT hr;
+
+	hr = SHGetPropertyStoreForWindow(hWnd, IID_PPV_ARGS(&pps));
+	if (SUCCEEDED(hr)) {
+		PropVariantInit(&pv);
+
+		hr = pps->SetValue(PKEY_AppUserModel_ID, pv);
+		if (SUCCEEDED(hr))
+			hr = pps->Commit();
+
+		pps->Release();
+	}
+
+	return SUCCEEDED(hr);
 }
 
 bool TTLibWrapper::moveButtonInGroup(const ButtonGroupInfo& bgi, int indexFrom, int indexTo) {

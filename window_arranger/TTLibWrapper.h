@@ -1,9 +1,5 @@
 #pragma once
 
-//#ifndef TTLIBWRAPPER_H
-//#define TTLIBWRAPPER_H
-//#define TTLIBWRAPPER_H_INSIDE
-
 #include <TTLib.h>
 
 #include <functional>
@@ -15,6 +11,12 @@ class TTLibWrapper
 {
 private:
 	static const std::string CLASSNAME;
+	bool locked = false;
+	struct Lock {
+		TTLibWrapper& ttl;
+		Lock(TTLibWrapper& ttl) : ttl(ttl) { ttl.lock(); }
+		~Lock() { ttl.unlock(); }
+	};
 
 public:
 	struct ButtonGroupInfo {
@@ -40,24 +42,29 @@ public:
 	template <typename T> bool forEachInGroup(const TTLibWrapper::ButtonGroupInfo& bgi, T callback) const;
 	template <typename T> void forEach(T callback) const;
 
-	bool setWindowAppId(HWND hWnd, const std::string& appId) const;
+	void lock();
+	void unlock();
+	[[nodiscard]] Lock scoped_lock() { return Lock(*this); }
+
+	bool setWindowAppId(HWND hWnd, std::string_view appId) const;
+	bool resetWindowAppId(HWND hWnd) const;
 	bool moveButtonInGroup(const ButtonGroupInfo& bgi, int indexFrom, int indexTo);
 
 	struct Exception { std::string str; };
 
 private:
-	std::string convertToUTF8(std::wstring wideString) const {
+	std::string convertToUTF8(std::wstring_view wideString) const {
 		int oldLength = static_cast<int>(wideString.length());
 		char* buffer = new char[oldLength * 2];
-		int size = WideCharToMultiByte(CP_UTF8, 0, wideString.c_str(), oldLength, buffer, oldLength * 2, NULL, NULL);
+		int size = WideCharToMultiByte(CP_UTF8, 0, wideString.data(), oldLength, buffer, oldLength * 2, NULL, NULL);
 		std::string narrowString(buffer, size);
 		delete[] buffer;
 		return narrowString;
 	}
-	std::wstring convertToUTF16(std::string narrowString) const {
+	std::wstring convertToUTF16(std::string_view narrowString) const {
 		int oldLength = static_cast<int>(narrowString.length());
 		wchar_t* buffer = new wchar_t[oldLength];
-		int size = MultiByteToWideChar(CP_UTF8, 0, narrowString.c_str(), oldLength, buffer, oldLength);
+		int size = MultiByteToWideChar(CP_UTF8, 0, narrowString.data(), oldLength, buffer, oldLength);
 		std::wstring wideString(buffer, size);
 		delete[] buffer;
 		return wideString;
@@ -70,8 +77,6 @@ template <typename T>
 void TTLibWrapper::forEachGroup(T callback) const {
 	TTLibWrapper::ButtonGroupInfo bgi;
 
-	if (!TTLib_ManipulationStart())
-		throw Exception{ EXCEPTION_STRING + " TTLib_ManipulationStart" };
 	bgi.taskbar = TTLib_GetMainTaskbar();
 	if (bgi.taskbar == NULL)
 		throw Exception{ EXCEPTION_STRING + " TTLib_GetMainTaskbar" };
@@ -96,8 +101,6 @@ void TTLibWrapper::forEachGroup(T callback) const {
 		if (!callback(bgi))
 			break;
 	}
-
-	TTLib_ManipulationEnd();
 }
 
 template <typename T>
@@ -127,6 +130,3 @@ void TTLibWrapper::forEach(T callback) const {
 	using namespace std::placeholders;
 	forEachGroup(std::bind(&TTLibWrapper::forEachInGroup<T>, this, _1, callback));
 }
-
-//#undef TTLIBWRAPPER_H_INSIDE
-//#endif //TTLIBWRAPPER_H

@@ -1,9 +1,11 @@
-// windows_order_fixer.cpp : Defines the entry point for the application.
+// windows_arranger.cpp : Defines the entry point for the application.
 //
 
 #include "pch.h"
 #include "window_arranger.h"
 #include "TaskbarManager.h"
+#include "utils.h"
+#include "Timer.h"
 
 #define RAPIDJSON_HAS_STDSTRING 1
 #include <rapidjson/document.h>
@@ -11,37 +13,15 @@
 
 #include <io.h>
 #include <fcntl.h>
-#include <fstream>
+#include <type_traits>
 #include <thread>
-#include <sstream>
+
 
 #define WM_NEW_TEXT_INPUT WM_USER
 //#define WM_WINDOWS_POSITIONS_CHANGED WM_USER+1
 
 #define ERROR_EXIT __COUNTER__+1
 
-static void logg(const std::string& s) {
-	static std::ofstream f("logmy.txt");//TODO better logging
-	f << s << std::endl;
-	f.flush();
-}
-
-static int error(const std::string& s, int e = 0) {
-	logg("ERROR: " + s);
-	return e;
-}
-
-
-WindowHandle convertCStringToWindowHandle(const char* str) {
-	return reinterpret_cast<WindowHandle>(strtoll(str, NULL, 0));
-}
-
-std::string convertWindowHandleToString(WindowHandle wh) {
-	std::stringstream ss;
-	ss << std::hex << std::showbase << reinterpret_cast<uint64_t>(wh);
-
-	return ss.str();
-}
 
 static void postMessage(const std::string& message) {
 	uint32_t size = static_cast<uint32_t>(message.length());
@@ -50,68 +30,83 @@ static void postMessage(const std::string& message) {
 	std::cout.flush();
 }
 
-struct NoPreValue {
-	//int toJson(rapidjson::MemoryPoolAllocator<>& allocator) { return 1; }
-};
+static void postMessage(const rapidjson::Value& value) {
+	rapidjson::StringBuffer buffer;
+	rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+	value.Accept(writer);
+	postMessage(buffer.GetString());
+}
 
-template <class T = NoPreValue>
-static void postOwnMessage(int id, const std::string& status = "OK", T preValue = T()) {
-	rapidjson::Document d(rapidjson::kObjectType);
+
+void fillOwnMessage(rapidjson::Document& d, int id, std::string_view status) {
 	auto& allctr = d.GetAllocator();
 
 	d.AddMember("source", "app", allctr)
 		.AddMember("id", id, allctr)
 		.AddMember("type", "arrangementChanged", allctr)
-		.AddMember("status", status, allctr);
+		.AddMember("status", rapidjson::Value(status.data(), static_cast<rapidjson::SizeType>(status.length())), allctr);
+}
 
-	if constexpr (std::negation_v<std::is_same<T, NoPreValue>>)
-		d.AddMember("value", preValue.toJson(allctr), allctr);
+static void postOwnMessage(int id, std::string_view status = "OK") {
+	rapidjson::Document d(rapidjson::kObjectType);
 
-	rapidjson::StringBuffer buffer;
-	rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-	d.Accept(writer);
-	postMessage(buffer.GetString());
+	fillOwnMessage(d, id, status);
+
+	postMessage(d);
 }
 
 template <class T>
-static void postOwnMessage(int id, T preValue) {
-	postOwnMessage(id, "OK", preValue);
+static void postOwnMessage(int id, std::string_view status, T value) {
+	rapidjson::Document d(rapidjson::kObjectType);
+
+	fillOwnMessage(d, id, status);
+
+	auto& allctr = d.GetAllocator();
+	d.AddMember("value", value.toJson(allctr), allctr);
+
+	postMessage(d);
 }
 
-//rapidjson::Document createResponseJsonDoc(int id, const std::string& status) {
-//	rapidjson::Document d;
-//
-//	d["source"].SetString("browser");
-//	d["id"].SetInt(id);
-//	d["type"].SetString("response");
-//	d["status"] = status;
-//
-//	return d;
-//}
+template <class T, typename = std::enable_if_t<!std::is_convertible_v<T, std::string_view>>>
+static void postOwnMessage(int id, T value) {
+	postOwnMessage(id, "OK", value);
+}
 
-template <class T = NoPreValue>
-static void postResponse(int id, const std::string& status = "OK", T preValue = T()) {
-	rapidjson::Document d(rapidjson::kObjectType);
+
+void fillResponse(rapidjson::Document& d, int id, std::string_view status) {
 	auto& allctr = d.GetAllocator();
-		
+
 	d.AddMember("source", "browser", allctr)
 		.AddMember("id", id, allctr)
 		.AddMember("type", "response", allctr)
-		.AddMember("status", status, allctr);
-
-	if constexpr (std::negation_v<std::is_same<T, NoPreValue>>)
-		d.AddMember("value", preValue.toJson(allctr), allctr);
-
-	rapidjson::StringBuffer buffer;
-	rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-	d.Accept(writer);
-	postMessage(buffer.GetString());
+		.AddMember("status", rapidjson::Value(status.data(), static_cast<rapidjson::SizeType>(status.length())), allctr);
 }
 
-template <class T>
-static void postResponse(int id, T preValue) {
-	postResponse(id, "OK", preValue);
+static void postResponse(int id, std::string_view status = "OK") {
+	rapidjson::Document d(rapidjson::kObjectType);
+
+	fillResponse(d, id, status);
+
+	postMessage(d);
 }
+
+template <typename T>
+static void postResponse(int id, std::string_view status, T value) {
+	rapidjson::Document d(rapidjson::kObjectType);
+
+	fillResponse(d, id, status);
+
+	auto& allctr = d.GetAllocator();
+	d.AddMember("value", value.toJson(allctr), allctr);
+
+	postMessage(d);
+}
+
+template <typename T, typename = std::enable_if_t<!std::is_convertible_v<T, std::string_view>>>
+static void postResponse(int id, T value) {
+	postResponse(id, "OK", value);
+}
+
 
 static int processMessage(const std::string& data, TaskbarManager& tbm) {
 	using namespace std::string_literals;
@@ -122,7 +117,7 @@ static int processMessage(const std::string& data, TaskbarManager& tbm) {
 	std::string source = d["source"].GetString();
 	int id = d["id"].GetInt();
 	std::string type = d["type"].GetString();
-	rapidjson::Value& value = d["value"]; // TODO: sprawdü, czy jest???
+	rapidjson::Value& value = d["value"];
 
 	if (source == "browser") {
 		try {
@@ -146,19 +141,17 @@ static int processMessage(const std::string& data, TaskbarManager& tbm) {
 				}
 				else {
 					std::set<WindowHandle> handleSet;
-					for (auto it = value.Begin(); it != value.End(); ++it)
-						handleSet.insert(convertCStringToWindowHandle(it->GetString()));
+					for (const auto& handleStringJson : value.GetArray()) {
+						handleSet.insert(convertCStringToWindowHandle(handleStringJson.GetString()));
+					}
 					postResponse(id, tbm.getArrangement(handleSet));
 				}
 			}
 			else if (type == "setArrangement") {
 				postResponse(id, tbm.setArrangement(Arrangement(value)));
 			}
-			else if (type == "updateArrangement") {
-				postResponse(id, tbm.updateArrangement());
-			}
 			else {
-				postResponse(id, "WRONG_TYPE"s);
+				postResponse(id, "WRONG_TYPE");
 			}
 		}
 		catch (TaskbarManager::Exception& e) {
@@ -170,19 +163,6 @@ static int processMessage(const std::string& data, TaskbarManager& tbm) {
 	return 0;
 }
 
-
-class Timer {
-	UINT_PTR timerId;
-public:
-	Timer(UINT elapse) {
-		timerId = SetTimer(NULL, NULL, elapse, NULL);
-		if (timerId == 0) {
-			throw Exception();
-		}
-	}
-	~Timer() { KillTimer(NULL, timerId); }
-	struct Exception {};
-};
 
 // TODO: better error handling
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
@@ -233,30 +213,26 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 		MSG msg;
 		while (GetMessage(&msg, nullptr, 0, 0)) {
 			switch (msg.message) {
-			case WM_NEW_TEXT_INPUT:
-			{
-				std::string* data = (std::string*)msg.wParam;
-				if (processMessage(*data, tbm))
-					return ERROR_EXIT;
-				delete data;
-			}
-			break;
-
-			case WM_TIMER:
-			{
-				Arrangement changed = tbm.updateArrangement();
-				if (changed) {
-					static int messageIdCounter = 1;
-					postOwnMessage(messageIdCounter++, changed);
+				case WM_NEW_TEXT_INPUT: {
+					std::string* data = (std::string*)msg.wParam;
+					if (processMessage(*data, tbm))
+						return ERROR_EXIT;
+					delete data;
 				}
-			}
-			break;
+				break;
 
-			default:
-			{
-				logg("other message: " + std::to_string(msg.message));
-			}
+				case WM_TIMER: {
+					Arrangement changed = tbm.updateArrangement();
+					if (changed) {
+						static int messageIdCounter = 1;
+						postOwnMessage(messageIdCounter++, changed);
+					}
+				}
+				break;
 
+				default: {
+					logg("other message: " + std::to_string(msg.message));
+				}
 			}
 
 			TranslateMessage(&msg);
