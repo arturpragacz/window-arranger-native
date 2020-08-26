@@ -1,0 +1,153 @@
+#ifndef _TTLIB_H_
+#define _TTLIB_H_
+
+#pragma once
+
+#include <windows.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define TTLIBCALL   __stdcall
+
+//////////////////////////////////////////////////////////////////////////
+// Initialization
+
+#define TTLIB_OK    0
+
+// Errors returned by TTLib_Init
+enum
+{
+	TTLIB_ERR_INIT_ALREADY_INITIALIZED = 1,
+	TTLIB_ERR_INIT_REGISTER_MESSAGE,
+	TTLIB_ERR_INIT_FILE_MAPPING,
+	TTLIB_ERR_INIT_VIEW_MAPPING,
+};
+
+// Errors returned by TTLib_LoadIntoExplorer
+enum
+{
+	TTLIB_ERR_EXE_NOT_INITIALIZED = 1,
+	TTLIB_ERR_EXE_ALREADY_LOADED,
+	TTLIB_ERR_EXE_FIND_TASKBAR,
+	TTLIB_ERR_EXE_OPEN_PROCESS,
+	TTLIB_ERR_EXE_VIRTUAL_ALLOC,
+	TTLIB_ERR_EXE_WRITE_PROC_MEM,
+	TTLIB_ERR_EXE_CREATE_REMOTE_THREAD,
+	TTLIB_ERR_EXE_READ_PROC_MEM,
+
+	TTLIB_ERR_INJ_BEFORE_RUN = 101,
+	TTLIB_ERR_INJ_BEFORE_GETMODULEHANDLE,
+	TTLIB_ERR_INJ_BEFORE_LOADLIBRARY,
+	TTLIB_ERR_INJ_BEFORE_GETPROCADDR,
+	TTLIB_ERR_INJ_BEFORE_LIBINIT,
+	TTLIB_ERR_INJ_GETMODULEHANDLE,
+	TTLIB_ERR_INJ_LOADLIBRARY,
+	TTLIB_ERR_INJ_GETPROCADDR,
+
+	TTLIB_ERR_LIB_INIT_ALREADY_CALLED = 201,
+	TTLIB_ERR_LIB_LIB_VER_MISMATCH,
+	TTLIB_ERR_LIB_WIN_VER_MISMATCH,
+	TTLIB_ERR_LIB_VIEW_MAPPING,
+	TTLIB_ERR_LIB_FIND_IMPORT,
+	TTLIB_ERR_LIB_WND_TASKBAR,
+	TTLIB_ERR_LIB_WND_TASKSW,
+	TTLIB_ERR_LIB_WND_TASKLIST,
+	TTLIB_ERR_LIB_WND_THUMB,
+	TTLIB_ERR_LIB_MSG_DLL_INIT,
+	TTLIB_ERR_LIB_WAITTHREAD,
+
+	TTLIB_ERR_LIB_EXTHREAD_MINHOOK = 301,
+	TTLIB_ERR_LIB_EXTHREAD_MINHOOK_PRELOADED,
+	TTLIB_ERR_LIB_EXTHREAD_COMFUNCHOOK,
+	TTLIB_ERR_LIB_EXTHREAD_REFRESHTASKBAR,
+	TTLIB_ERR_LIB_EXTHREAD_MINHOOK_APPLY,
+};
+
+DWORD TTLIBCALL TTLib_Init();
+BOOL TTLIBCALL TTLib_Uninit();
+
+DWORD TTLIBCALL TTLib_LoadIntoExplorer();
+BOOL TTLIBCALL TTLib_IsLoadedIntoExplorer();
+BOOL TTLIBCALL TTLib_UnloadFromExplorer();
+
+//////////////////////////////////////////////////////////////////////////
+// Manipulation
+
+typedef enum
+{
+	TTLIB_GROUPTYPE_UNKNOWN = 0,
+	TTLIB_GROUPTYPE_NORMAL,
+	TTLIB_GROUPTYPE_PINNED,
+	TTLIB_GROUPTYPE_COMBINED,
+	TTLIB_GROUPTYPE_TEMPORARY,
+} TTLIB_GROUPTYPE;
+
+BOOL TTLIBCALL TTLib_ManipulationStart();
+BOOL TTLIBCALL TTLib_ManipulationEnd();
+
+HANDLE TTLIBCALL TTLib_GetMainTaskbar();
+BOOL TTLIBCALL TTLib_GetSecondaryTaskbarCount(int *pnCount);
+HANDLE TTLIBCALL TTLib_GetSecondaryTaskbar(int nIndex);
+HWND TTLIBCALL TTLib_GetTaskListWindow(HANDLE hTaskbar);
+HWND TTLIBCALL TTLib_GetTaskbarWindow(HANDLE hTaskbar);
+HMONITOR TTLIBCALL TTLib_GetTaskbarMonitor(HANDLE hTaskbar);
+
+BOOL TTLIBCALL TTLib_GetButtonGroupCount(HANDLE hTaskbar, int *pnCount);
+HANDLE TTLIBCALL TTLib_GetButtonGroup(HANDLE hTaskbar, int nIndex);
+HANDLE TTLIBCALL TTLib_GetActiveButtonGroup(HANDLE hTaskbar);
+HANDLE TTLIBCALL TTLib_GetTrackedButtonGroup(HANDLE hTaskbar);
+BOOL TTLIBCALL TTLib_ButtonGroupMove(HANDLE hTaskbar, int nIndexFrom, int nIndexTo);
+BOOL TTLIBCALL TTLib_GetButtonGroupTaskbar(HANDLE hButtonGroup, HANDLE *phTaskbar);
+BOOL TTLIBCALL TTLib_GetButtonGroupRect(HANDLE hButtonGroup, RECT *pRect);
+BOOL TTLIBCALL TTLib_GetButtonGroupType(HANDLE hButtonGroup, TTLIB_GROUPTYPE *pnType);
+SIZE_T TTLIBCALL TTLib_GetButtonGroupAppId(HANDLE hButtonGroup, WCHAR *pszAppId, SIZE_T nMaxSize);
+
+BOOL TTLIBCALL TTLib_GetButtonCount(HANDLE hButtonGroup, int *pnCount);
+HANDLE TTLIBCALL TTLib_GetButton(HANDLE hButtonGroup, int nIndex);
+HANDLE TTLIBCALL TTLib_GetActiveButton(HANDLE hTaskbar);
+HANDLE TTLIBCALL TTLib_GetTrackedButton(HANDLE hTaskbar);
+BOOL TTLIBCALL TTLib_ButtonMoveInButtonGroup(HANDLE hButtonGroup, int nIndexFrom, int nIndexTo);
+HWND TTLIBCALL TTLib_GetButtonWindow(HANDLE hButton);
+
+//////////////////////////////////////////////////////////////////////////
+// Lists
+
+typedef enum
+{
+	TTLIB_LIST_LABEL = 0,
+	TTLIB_LIST_GROUP,
+	TTLIB_LIST_GROUPPINNED,
+	TTLIB_LIST_COMBINE,
+} TTLIB_LIST;
+
+typedef enum
+{
+	TTLIB_LIST_LABEL_NEVER = 0,
+	TTLIB_LIST_LABEL_ALWAYS,
+
+	TTLIB_LIST_GROUP_NEVER = 0,
+	TTLIB_LIST_GROUP_ALWAYS,
+
+	TTLIB_LIST_GROUPPINNED_NEVER = 0,
+	TTLIB_LIST_GROUPPINNED_ALWAYS,
+
+	TTLIB_LIST_COMBINE_NEVER = 0,
+	TTLIB_LIST_COMBINE_ALWAYS,
+} TTLIB_LIST_VALUE;
+
+BOOL TTLIBCALL TTLib_AddAppIdToList(TTLIB_LIST nList, const WCHAR *pszAppId, TTLIB_LIST_VALUE nListValue);
+BOOL TTLIBCALL TTLib_RemoveAppIdFromList(TTLIB_LIST nList, const WCHAR *pszAppId);
+BOOL TTLIBCALL TTLib_GetAppIdListValue(TTLIB_LIST nList, const WCHAR *pszAppId, TTLIB_LIST_VALUE *pnListValue);
+
+//////////////////////////////////////////////////////////////////////////
+// Other
+
+#define MAX_APPID_LENGTH      MAX_PATH
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // _TTLIB_H_

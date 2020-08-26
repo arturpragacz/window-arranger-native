@@ -7,125 +7,54 @@
 const std::string TaskbarManager::CLASSNAME = "TaskbarManager";
 
 
-TaskbarManager::TaskbarManager() try {
-}
-catch (const TTLibWrapper::Exception& e) {
-	throw Exception{ EXCEPTION_STRING + " | " + e.str };
-}
-
-
-Arrangement TaskbarManager::addToObserved(const std::set<WindowHandle>& handleSet) {
-	Arrangement arrangement;
-	try {
-		int windowsLeft = static_cast<int>(handleSet.size());
-		auto lock = ttl.scoped_lock();
-		ttl.forEach([this, &handleSet, &arrangement, &windowsLeft](const TTLibWrapper::ButtonInfo& bi) {
-			if (handleSet.find(bi.windowHandle) != handleSet.end()) {
-				windowsLeft -= 1;
-				auto positionIt = observed.find(bi.windowHandle);
-				if (positionIt == observed.end()) {
-					std::pair<WindowHandle, Position> pair(bi.windowHandle, Position(WindowGroup(bi.group.appId), bi.index));
-					observed.insert(pair);
-					arrangement.insert(pair);
-				}
-			}
-
-			if (windowsLeft > 0)
-				return true;
-			else
-				return false;
-		});
-	}
-	catch (const TTLibWrapper::Exception& e) {
-		throw Exception{ EXCEPTION_STRING + " | " + e.str };
-	}
-	return arrangement;
-}
-
-void TaskbarManager::deleteFromObserved(const std::vector<WindowHandle>& handles) {
-	for (const auto& handle : handles) {
-		observed.erase(handle);
-	}
-}
-
-Arrangement TaskbarManager::getArrangement() {
-	return getArrangement(true, nullptr);
-}
-
-Arrangement TaskbarManager::getArrangement(const std::set<WindowHandle>& handleSet, bool inObserved) {
-	return getArrangement(false, &handleSet);
-}
-
-Arrangement TaskbarManager::getArrangement(bool all, const std::set<WindowHandle>* handleSetPtr, bool inObserved) {
-	Arrangement arrangement;
-	try {
-		auto lock = ttl.scoped_lock();
-		ttl.forEach([this, all, handleSetPtr, inObserved, &arrangement](const TTLibWrapper::ButtonInfo& bi) {
-			if (all || handleSetPtr->find(bi.windowHandle) != handleSetPtr->end()) {
-				if (inObserved) {
-					auto positionIt = observed.find(bi.windowHandle);
-					if (positionIt != observed.end()) {
-						Position& position = positionIt->second;
-						position.update(WindowGroup(bi.group.appId), bi.index);
-						arrangement.insert(std::pair<WindowHandle, Position>(bi.windowHandle, position));
-					}
-				}
-				else {
-					Position position(WindowGroup(bi.group.appId), bi.index);
-					arrangement.insert(std::pair<WindowHandle, Position>(bi.windowHandle, position));
-				}
-			}
-			return true;
-		});
-	}
-	catch (const TTLibWrapper::Exception& e) {
-		throw Exception{ EXCEPTION_STRING + " | " + e.str };
-	}
-	return arrangement;
-}
-
 Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 	auto organizedDestination = destination.organizeByGroup();
 	int groupsLeft = static_cast<int>(organizedDestination.size());
+
+	for (const auto& [windowGroup, posWindowVector] : organizedDestination) {
+		// przenosimy do właściwej grupy
+		for (const auto& posWindow : posWindowVector) {
+			if (posWindow->second.getGroup().isDefault())
+				shi.resetWindowAppId(posWindow->first);
+			else
+				shi.setWindowAppId(posWindow->first, posWindow->second.getGroup().getName());
+		}
+	}
+
+	// czekamy, aż zmiany rozpropagują się do graficznej powłoki
+	shi.sleep(500);
+
 	try {
-		auto lock = ttl.scoped_lock();
-		ttl.forEachGroup(
-			[this, &organizedDestination, &groupsLeft](const TTLibWrapper::ButtonGroupInfo& bgi) {
-				auto windowGroupIt = organizedDestination.find(WindowGroup(bgi.appId));
-				if (windowGroupIt != organizedDestination.end()) {
+		auto lock = shi.scoped_lock();
+		shi.forEachGroup(
+			[this, &organizedDestination, &groupsLeft](const ShellIntegrator::ButtonGroupInfo& bgi) {
+				auto organizedDestinationIt = organizedDestination.find(wgf.build(bgi.appId));
+				if (organizedDestinationIt != organizedDestination.end()) {
 					groupsLeft -= 1;
 
 					// typedef std::vector<const std::map<WindowHandle, Position>::value_type*> PosWindowVector;
 					// typedef std::vector<const std::pair<const WindowHandle, Position>*> PosWindowVector;
-					auto windowGroup = windowGroupIt->second;
+					auto& posWindowVector = organizedDestinationIt->second;
 					// typedef const std::pair<const WindowHandle, Position> PosWindow;
-					using PosWindow = std::remove_pointer_t<decltype(windowGroup)::value_type>;
+					using PosWindow = std::remove_pointer_t<std::remove_reference_t<decltype(posWindowVector)>::value_type>;
 
 					// zmieniamy tylko te, które już obserwujemy
-					windowGroup.erase(
-						std::remove_if(windowGroup.begin(), windowGroup.end(),
-							[&](decltype(windowGroup)::value_type p) {
+					posWindowVector.erase(
+						std::remove_if(posWindowVector.begin(), posWindowVector.end(),
+							[&](PosWindow* p) {
 								return observed.find(p->first) == observed.end();
 							}
 						),
-						windowGroup.end()
+						posWindowVector.end()
 					);
-					const int windowsNumber = static_cast<int>(windowGroup.size());
+					const int windowsNumber = static_cast<int>(posWindowVector.size());
 
 					// sortujemy po [WindowHandle]
-					std::sort(windowGroup.begin(), windowGroup.end(),
+					std::sort(posWindowVector.begin(), posWindowVector.end(),
 						[](PosWindow* posWindow1Ptr, PosWindow* posWindow2Ptr) {
 							return posWindow1Ptr->first < posWindow2Ptr->first;
 						}
 					);
-
-					// przenosimy do właściwej grupy
-					for (const auto& posWindow : windowGroup) {
-						if (posWindow->second.getGroup().isDefault())
-							ttl.resetWindowAppId(posWindow->first);
-						else
-							ttl.setWindowAppId(posWindow->first, posWindow->second.getGroup().getName());
-					}
 					
 					// obecna kolejność (rosnąco)
 					std::list<int> order;
@@ -139,7 +68,7 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 							: destination(d) {}
 					};
 					std::vector<OrderedPosWindow> orderedPosWindows;
-					std::transform(windowGroup.begin(), windowGroup.end(),
+					std::transform(posWindowVector.begin(), posWindowVector.end(),
 						std::back_inserter(orderedPosWindows), [&order](PosWindow* d) {
 							return OrderedPosWindow(d, order.end());
 					});
@@ -147,8 +76,8 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 					{
 						int windowsLeft = windowsNumber;
 						int top = 0;
-						ttl.forEachInGroup(bgi, [&](const TTLibWrapper::ButtonInfo& bi) {
-							PosWindow tmpDestination = PosWindow(bi.windowHandle, Position());
+						shi.forEachInGroup(bgi, [&](const ShellIntegrator::ButtonInfo& bi) {
+							PosWindow tmpDestination = PosWindow(bi.windowHandle, Position(wgf));
 							auto [opw, opw2] = std::equal_range(orderedPosWindows.begin(), orderedPosWindows.end(),
 								OrderedPosWindow(&tmpDestination),
 								[](const OrderedPosWindow& opw1, const OrderedPosWindow& opw2) -> bool {
@@ -159,8 +88,8 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 								windowsLeft -= 1;
 								// przestawiamy okno na górę
 								if (bi.index != top) {
-									if (!ttl.moveButtonInGroup(bgi, bi.index, top)) {
-										throw Exception{ EXCEPTION_STRING + " ttl.moveButtonInGroup: " + to_string(bgi.index)
+									if (!shi.moveButtonInGroup(bgi, bi.index, top)) {
+										throw Exception{ EXCEPTION_STRING + " shi.moveButtonInGroup: " + to_string(bgi.index)
 											+ " " + to_string(bi.index) + " " + to_string(top) };
 									}
 								}
@@ -220,8 +149,8 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 						int currentIndex = *orderedPosWindow.current;
 						int destinationIndex = orderedPosWindow.destination->second.getIndex();
 						assert(currentIndex <= destinationIndex);
-						if (!ttl.moveButtonInGroup(bgi, currentIndex, destinationIndex)) {
-							throw Exception{ EXCEPTION_STRING + " ttl.moveButtonInGroup: " + to_string(bgi.index)
+						if (!shi.moveButtonInGroup(bgi, currentIndex, destinationIndex)) {
+							throw Exception{ EXCEPTION_STRING + " shi.moveButtonInGroup: " + to_string(bgi.index)
 								+ " " + to_string(currentIndex) + " " + to_string(destinationIndex) };
 						}
 
@@ -239,7 +168,7 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 					return false;
 		});
 	}
-	catch (const TTLibWrapper::Exception& e) {
+	catch (const ShellIntegrator::Exception& e) {
 		throw Exception{ EXCEPTION_STRING + " | " + e.str };
 	}
 	return updateArrangement();
@@ -248,19 +177,19 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 Arrangement TaskbarManager::updateArrangement() {
 	Arrangement changed;
 	try {
-		auto lock = ttl.scoped_lock();
-		ttl.forEach([this, &changed](const TTLibWrapper::ButtonInfo& bi) {
+		auto lock = shi.scoped_lock();
+		shi.forEach([this, &changed](const ShellIntegrator::ButtonInfo& bi) {
 			auto positionIt = observed.find(bi.windowHandle);
 			if (positionIt != observed.end()) {
 				Position& position = positionIt->second;
-				if (position.update(WindowGroup(bi.group.appId), bi.index))
-					changed.insert(std::pair<WindowHandle, Position>(bi.windowHandle, position));
+				if (position.update(wgf.build(bi.group.appId), bi.index))
+					changed.insert_or_assign(bi.windowHandle, position);
 			}
 			
 			return true;
 		});
 	}
-	catch (const TTLibWrapper::Exception& e) {
+	catch (const ShellIntegrator::Exception& e) {
 		throw Exception{ EXCEPTION_STRING + " | " + e.str };
 	}
 	return changed;

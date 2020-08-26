@@ -1,0 +1,7 @@
+{
+	"name": "window_arranger",
+	"description": "Improves arrangement of windows.",
+	"path": "window_arranger.exe",
+	"type": "stdio",
+	"allowed_extensions": [ "window_arranger@webext.pragacz.com" ]
+}

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -113,7 +113,9 @@
       <AdditionalLibraryDirectories>../lib/;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y /d "..\dll\TTLib64.dll" "$(OutDir)"</Command>
+      <Command>xcopy /y /d "..\dll\TTLib64.dll" "$(OutDir)"
+xcopy /y /d "..\other\window_arranger.json" "$(OutDir)"
+xcopy /y /d "..\other\register_native.ps1" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -135,7 +137,9 @@
       <AdditionalLibraryDirectories>../lib/;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y /d "..\dll\TTLib32.dll" "$(OutDir)"</Command>
+      <Command>xcopy /y /d "..\dll\TTLib32.dll" "$(OutDir)"
+xcopy /y /d "..\other\window_arranger.json" "$(OutDir)"
+xcopy /y /d "..\other\register_native.ps1" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -157,7 +161,9 @@
       <AdditionalLibraryDirectories>../lib/;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y /d "..\dll\TTLib64.dll" "$(OutDir)"</Command>
+      <Command>xcopy /y /d "..\dll\TTLib64.dll" "$(OutDir)"
+xcopy /y /d "..\other\window_arranger.json" "$(OutDir)"
+xcopy /y /d "..\other\register_native.ps1" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -183,20 +189,24 @@
       <AdditionalLibraryDirectories>../lib/;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y /d "..\dll\TTLib32.dll" "$(OutDir)"</Command>
+      <Command>xcopy /y /d "..\dll\TTLib32.dll" "$(OutDir)"
+xcopy /y /d "..\other\window_arranger.json" "$(OutDir)"
+xcopy /y /d "..\other\register_native.ps1" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Arrangement.h" />
+    <ClInclude Include="Messenger.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="TaskbarManager.h" />
     <ClInclude Include="Timer.h" />
-    <ClInclude Include="TTLibWrapper.h" />
+    <ClInclude Include="ShellIntegrator.h" />
     <ClInclude Include="utils.h" />
-    <ClInclude Include="window_arranger.h" />
+    <ClInclude Include="WindowGroup.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Messenger.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
@@ -204,12 +214,8 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="TaskbarManager.cpp" />
-    <ClCompile Include="TTLibWrapper.cpp" />
+    <ClCompile Include="ShellIntegrator.cpp" />
     <ClCompile Include="window_arranger.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="ClassDiagram.cd" />
-    <None Include="window_arranger.json" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

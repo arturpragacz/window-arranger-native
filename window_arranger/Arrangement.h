@@ -1,6 +1,6 @@
 #pragma once
 
-#include "utils.h"
+#include "WindowGroup.h"
 
 #define RAPIDJSON_HAS_STDSTRING 1
 #include <rapidjson/document.h>
@@ -8,73 +8,22 @@
 #include <map>
 #include <vector>
 #include <algorithm>
+#include <sstream>
 
-class WindowGroup {
-private:
-	bool defGroup;
-	std::string name;
 
-public:
-	WindowGroup() : defGroup(true) {}
-	explicit WindowGroup(std::string_view nm) {
-		if (nm == DEFAULTGROUP) {
-			defGroup = true;
-		}
-		else {
-			defGroup = false;
-			name = nm;
-		}
-	}
-	explicit WindowGroup(const rapidjson::Value& value) : defGroup(value["defGroup"].GetBool()) {
-		if (!defGroup)
-			name = value["name"].GetString();
-	}
+using WindowHandle = HWND;
 
-	bool operator<(const WindowGroup& rhs) const {
-		if (defGroup != rhs.defGroup)
-			return defGroup;
-		else
-			return name < rhs.name;
-	}
+inline HWND convertCStringToWindowHandle(const char* str) {
+	return reinterpret_cast<HWND>(strtoll(str, NULL, 0));
+}
 
-	std::string_view getName() const {
-		if (name == DEFAULTGROUP)
-			return DEFAULTGROUP;
-		else
-			return name;
-	}
-	bool isDefault() const {
-		return defGroup;
-	}
-	rapidjson::Value toJson(rapidjson::MemoryPoolAllocator<>& allocator) const {
-		rapidjson::Value value(rapidjson::kObjectType);
-		value.AddMember("defGroup", defGroup, allocator);
-		if (!defGroup)
-			value.AddMember("name", name, allocator);
-		return value;
-	}
+inline std::string convertWindowHandleToString(HWND wh) {
+	std::stringstream ss;
+	ss << std::hex << std::showbase << reinterpret_cast<uint64_t>(wh);
 
-	bool update(const WindowGroup& newGroup) {
-		bool updated = false;
+	return ss.str();
+}
 
-		if (this->defGroup != newGroup.defGroup) {
-			this->defGroup = newGroup.defGroup;
-			updated = true;
-		}
-
-		if (this->defGroup) {
-			this->name.clear();
-		}
-		else {
-			if (this->name != newGroup.name) {
-				this->name = name;
-				updated = true;
-			}
-		}
-
-		return updated;
-	}
-};
 
 class Position {
 private:
@@ -82,11 +31,11 @@ private:
 	WindowGroup group;
 
 public:
-	Position() : group(), index(-1) {}
-	explicit Position(int index) : group(), index(index) {}
+	explicit Position(const WindowGroupFactory& wgf) : group(wgf.build()), index(-1) {}
+	Position(int index, const WindowGroupFactory& wgf) : group(wgf.build()), index(index) {}
 	Position(const WindowGroup& group, int index) : group(group), index(index) {}
-	explicit Position(const rapidjson::Value& value)
-		: group(value["group"]), index(value["index"].GetInt()) {}
+	Position(const rapidjson::Value& value, const WindowGroupFactory& wgf)
+		: group(wgf.build(value["group"])), index(value["index"].GetInt()) {}
 
 	rapidjson::Value toJson(rapidjson::MemoryPoolAllocator<>& allocator) const {
 		rapidjson::Value value(rapidjson::kObjectType);
@@ -120,15 +69,16 @@ public:
 	}
 };
 
+
 class Arrangement : public std::map<WindowHandle, Position> {
 public:
 	Arrangement() = default;
-	Arrangement(const rapidjson::Value& value) {
+	Arrangement(const rapidjson::Value& value, const WindowGroupFactory& wgf) {
 		for (const auto& posWindowJson : value.GetArray()) {
 			this->insert(
 				std::pair<WindowHandle, Position>(
 					convertCStringToWindowHandle(posWindowJson["handle"].GetString()),
-					Position(posWindowJson["position"])
+					Position(posWindowJson["position"], wgf)
 				)
 			);
 		}

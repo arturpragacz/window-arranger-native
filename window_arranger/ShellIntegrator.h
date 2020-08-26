@@ -7,15 +7,14 @@
 using std::to_string;
 #define EXCEPTION_STRING CLASSNAME + "::" + __func__
 
-class TTLibWrapper
-{
+class ShellIntegrator {
 private:
 	static const std::string CLASSNAME;
 	bool locked = false;
 	struct Lock {
-		TTLibWrapper& ttl;
-		Lock(TTLibWrapper& ttl) : ttl(ttl) { ttl.lock(); }
-		~Lock() { ttl.unlock(); }
+		ShellIntegrator& shi;
+		Lock(ShellIntegrator& shi) : shi(shi) { shi.lock(); }
+		~Lock() { shi.unlock(); }
 	};
 
 public:
@@ -35,20 +34,23 @@ public:
 		ButtonInfo(const ButtonGroupInfo& g) : group(g) {}
 	};
 
-	TTLibWrapper();
-	~TTLibWrapper();
+	ShellIntegrator();
+	~ShellIntegrator();
 
 	template <typename T> void forEachGroup(T callback) const;
-	template <typename T> bool forEachInGroup(const TTLibWrapper::ButtonGroupInfo& bgi, T callback) const;
+	template <typename T> bool forEachInGroup(const ShellIntegrator::ButtonGroupInfo& bgi, T callback) const;
 	template <typename T> void forEach(T callback) const;
 
 	void lock();
 	void unlock();
 	[[nodiscard]] Lock scoped_lock() { return Lock(*this); }
 
+	DWORD getParentProcessId();
+	std::string getProcessAppId(DWORD processId);
 	bool setWindowAppId(HWND hWnd, std::string_view appId) const;
 	bool resetWindowAppId(HWND hWnd) const;
 	bool moveButtonInGroup(const ButtonGroupInfo& bgi, int indexFrom, int indexTo);
+	void sleep(int msecs);
 
 	struct Exception { std::string str; };
 
@@ -71,11 +73,11 @@ private:
 	}
 };
 
-//void (*callback)(const TTLibWrapper::ButtonInfo&))
+//void (*callback)(const ShellIntegrator::ButtonInfo&))
 
 template <typename T>
-void TTLibWrapper::forEachGroup(T callback) const {
-	TTLibWrapper::ButtonGroupInfo bgi;
+void ShellIntegrator::forEachGroup(T callback) const {
+	ShellIntegrator::ButtonGroupInfo bgi;
 
 	bgi.taskbar = TTLib_GetMainTaskbar();
 	if (bgi.taskbar == NULL)
@@ -104,8 +106,8 @@ void TTLibWrapper::forEachGroup(T callback) const {
 }
 
 template <typename T>
-bool TTLibWrapper::forEachInGroup(const TTLibWrapper::ButtonGroupInfo& bgi, T callback) const {
-	TTLibWrapper::ButtonInfo bi(bgi);
+bool ShellIntegrator::forEachInGroup(const ShellIntegrator::ButtonGroupInfo& bgi, T callback) const {
+	ShellIntegrator::ButtonInfo bi(bgi);
 
 	int buttonCount = bgi.buttonCount;
 	for (int i = 0; i < buttonCount; ++i) {
@@ -126,7 +128,7 @@ bool TTLibWrapper::forEachInGroup(const TTLibWrapper::ButtonGroupInfo& bgi, T ca
 }
 
 template <typename T>
-void TTLibWrapper::forEach(T callback) const {
+void ShellIntegrator::forEach(T callback) const {
 	using namespace std::placeholders;
-	forEachGroup(std::bind(&TTLibWrapper::forEachInGroup<T>, this, _1, callback));
+	forEachGroup(std::bind(&ShellIntegrator::forEachInGroup<T>, this, _1, callback));
 }
