@@ -43,7 +43,7 @@ void Messenger::postOwnMessage(int id, std::string_view status) {
 	postMessage(d);
 }
 
-template <class T>
+template<typename T>
 void Messenger::postOwnMessage(int id, std::string_view status, T value) {
 	rapidjson::Document d(rapidjson::kObjectType);
 
@@ -55,7 +55,7 @@ void Messenger::postOwnMessage(int id, std::string_view status, T value) {
 	postMessage(d);
 }
 
-template <class T, typename>
+template<typename T, typename>
 void Messenger::postOwnMessage(int id, T value) {
 	postOwnMessage(id, "OK", value);
 }
@@ -78,7 +78,7 @@ void Messenger::postResponse(int id, std::string_view status) {
 	postMessage(d);
 }
 
-template <typename T>
+template<typename T>
 void Messenger::postResponse(int id, std::string_view status, T value) {
 	rapidjson::Document d(rapidjson::kObjectType);
 
@@ -90,7 +90,7 @@ void Messenger::postResponse(int id, std::string_view status, T value) {
 	postMessage(d);
 }
 
-template <typename T, typename>
+template<typename T, typename>
 void Messenger::postResponse(int id, T value) {
 	postResponse(id, "OK", value);
 }

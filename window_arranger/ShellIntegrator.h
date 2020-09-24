@@ -37,9 +37,9 @@ public:
 	ShellIntegrator();
 	~ShellIntegrator();
 
-	template <typename T> void forEachGroup(T callback) const;
-	template <typename T> bool forEachInGroup(const ShellIntegrator::ButtonGroupInfo& bgi, T callback) const;
-	template <typename T> void forEach(T callback) const;
+	template<typename T> void forEachGroup(T callback) const;
+	template<typename T> bool forEachInGroup(const ShellIntegrator::ButtonGroupInfo& bgi, T callback) const;
+	template<typename T> void forEach(T callback) const;
 
 	void lock();
 	void unlock();
@@ -75,7 +75,7 @@ private:
 
 //void (*callback)(const ShellIntegrator::ButtonInfo&))
 
-template <typename T>
+template<typename T>
 void ShellIntegrator::forEachGroup(T callback) const {
 	ShellIntegrator::ButtonGroupInfo bgi;
 
@@ -105,7 +105,7 @@ void ShellIntegrator::forEachGroup(T callback) const {
 	}
 }
 
-template <typename T>
+template<typename T>
 bool ShellIntegrator::forEachInGroup(const ShellIntegrator::ButtonGroupInfo& bgi, T callback) const {
 	ShellIntegrator::ButtonInfo bi(bgi);
 
@@ -127,7 +127,7 @@ bool ShellIntegrator::forEachInGroup(const ShellIntegrator::ButtonGroupInfo& bgi
 	return true;
 }
 
-template <typename T>
+template<typename T>
 void ShellIntegrator::forEach(T callback) const {
 	using namespace std::placeholders;
 	forEachGroup(std::bind(&ShellIntegrator::forEachInGroup<T>, this, _1, callback));

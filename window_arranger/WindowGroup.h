@@ -38,6 +38,7 @@ private:
 	bool equalDefGroupNames(const WindowGroup& other) const noexcept {
 		return &defGroupName == &other.defGroupName || defGroupName == other.defGroupName;
 	}
+
 public:
 	WindowGroup(const WindowGroup&) = default;
 	WindowGroup(WindowGroup&&) = default;
@@ -122,6 +123,7 @@ public:
 class WindowGroupFactory {
 private:
 	const std::string defGroupName;
+
 public:
 	WindowGroupFactory(std::string_view defGroupName) : defGroupName(defGroupName) {}
 

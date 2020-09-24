@@ -97,6 +97,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	catch (Timer::Exception&) {
 		return error("can't create timer", ERROR_EXIT);
 	}
+	catch (...) {
+		return error("unexpected error", ERROR_EXIT);
+	}
 
 	// never should be here!
 }

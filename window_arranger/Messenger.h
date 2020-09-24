@@ -8,6 +8,7 @@
 
 #define EXCEPTION_STRING CLASSNAME + "::" + __func__
 
+
 class Messenger {
 private:
 	static const std::string CLASSNAME;
@@ -16,7 +17,7 @@ private:
 	const WindowGroupFactory& wgf;
 
 public:
-	template <typename FR, typename FE>
+	template<typename FR, typename FE>
 	Messenger(TaskbarManager& tbm, const WindowGroupFactory& wgf, FR funcRead, FE funcEnd);
 	~Messenger();
 
@@ -32,21 +33,21 @@ private:
 
 	void fillOwnMessage(rapidjson::Document& d, int id, std::string_view status);
 	void postOwnMessage(int id, std::string_view status = "OK");
-	template <class T>
+	template<typename T>
 	void postOwnMessage(int id, std::string_view status, T value);
-	template <class T, typename = std::enable_if_t<!std::is_convertible_v<T, std::string_view>>>
+	template<typename T, typename = std::enable_if_t<!std::is_convertible_v<T, std::string_view>>>
 	void postOwnMessage(int id, T value);
 
 
 	void fillResponse(rapidjson::Document& d, int id, std::string_view status);
 	void postResponse(int id, std::string_view status = "OK");
-	template <typename T>
+	template<typename T>
 	void postResponse(int id, std::string_view status, T value);
-	template <typename T, typename = std::enable_if_t<!std::is_convertible_v<T, std::string_view>>>
+	template<typename T, typename = std::enable_if_t<!std::is_convertible_v<T, std::string_view>>>
 	void postResponse(int id, T value);
 };
 
-template <typename FR, typename FE>
+template<typename FR, typename FE>
 inline Messenger::Messenger(TaskbarManager& tbm, const WindowGroupFactory& wgf, FR funcRead, FE funcEnd) : tbm(tbm), wgf(wgf), reader([&] {
 	uint32_t size = 0;
 	while (std::cin.read(reinterpret_cast<char*>(&size), sizeof size)) {

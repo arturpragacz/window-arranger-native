@@ -9,6 +9,7 @@
 
 #define EXCEPTION_STRING CLASSNAME + "::" + __func__
 
+
 class TaskbarManager {
 private:
 	static const std::string CLASSNAME;
