@@ -42,6 +42,12 @@
     <ClInclude Include="WindowGroup.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="TTLibWrapper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="windows_utils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="window_arranger.cpp">
@@ -57,6 +63,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ShellIntegrator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TTLibWrapper.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="windows_utils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

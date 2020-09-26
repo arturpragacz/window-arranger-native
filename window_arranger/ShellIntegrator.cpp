@@ -12,37 +12,44 @@
 const std::string ShellIntegrator::CLASSNAME = "ShellIntegrator";
 
 
-ShellIntegrator::ShellIntegrator() {
-	DWORD dwError = TTLib_Init();
-	if (dwError == TTLIB_OK) {
-		dwError = TTLib_LoadIntoExplorer();
-		if (dwError != TTLIB_OK) {
-			throw Exception{ EXCEPTION_STRING + " TTLib_LoadIntoExplorer: " + to_string(dwError) };
-		}
-	}
-	else {
-		throw Exception{ EXCEPTION_STRING + " TTLib_Init: " + to_string(dwError) };
-	}
+ShellIntegrator::ShellIntegrator() try {
+	ttlib.loadIntoExplorer();
+}
+catch (const TTLibWrapper::Exception& e) {
+	throw Exception{ EXCEPTION_STRING + " | " + e.str };
 }
 
 ShellIntegrator::~ShellIntegrator() {
-	TTLib_UnloadFromExplorer();
-	TTLib_Uninit();
+	try {
+		ttlib.unloadFromExplorer();
+	}
+	catch (const TTLibWrapper::Exception&) {
+		// don't throw from destructor
+	}
 }
 
 
 void ShellIntegrator::lock() {
 	if (!locked) {
-		if (!TTLib_ManipulationStart())
-			throw Exception{ EXCEPTION_STRING + " TTLib_ManipulationStart" };
-		locked = true;
+		try {
+			ttlib.manipulationStart();
+			locked = true;
+		}
+		catch (const TTLibWrapper::Exception& e) {
+			throw Exception{ EXCEPTION_STRING + " | " + e.str };
+		}
 	}
 }
 
 void ShellIntegrator::unlock() {
 	if (locked) {
-		TTLib_ManipulationEnd();
-		locked = false;
+		try {
+			ttlib.manipulationEnd();
+			locked = false;
+		}
+		catch (const TTLibWrapper::Exception& e) {
+			throw Exception{ EXCEPTION_STRING + " | " + e.str };
+		}
 	}
 }
 
@@ -53,7 +60,7 @@ DWORD ShellIntegrator::getParentProcessId() {
 
 	HANDLE hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 	if (hProcessSnap == INVALID_HANDLE_VALUE) {
-		return 0;
+		throw Exception{ EXCEPTION_STRING + ": CreateToolhelp32Snapshot: " + to_string(GetLastError()) };
 	}
 
 	PROCESSENTRY32 pe32;
@@ -61,7 +68,7 @@ DWORD ShellIntegrator::getParentProcessId() {
 
 	if (!Process32First(hProcessSnap, &pe32)) {
 		CloseHandle(hProcessSnap);
-		return 0;
+		throw Exception{ EXCEPTION_STRING + ": Process32First: " + to_string(GetLastError()) };
 	}
 
 	do {
@@ -72,6 +79,9 @@ DWORD ShellIntegrator::getParentProcessId() {
 	} while (Process32Next(hProcessSnap, &pe32));
 
 	CloseHandle(hProcessSnap);
+
+	if (!dwParentProcessId)
+		throw Exception{ EXCEPTION_STRING + ": can't find parent process" };
 	return dwParentProcessId;
 }
 
@@ -88,9 +98,11 @@ struct IAppResolver_8 : IUnknown {
 
 std::string ShellIntegrator::getProcessAppId(DWORD processId) {
 	std::string appId;
+	std::string error;
+	HRESULT hr;
 
-	std::thread th([this, processId, &appId] {
-		HRESULT hr = CoInitialize(NULL);
+	std::thread th([this, processId, &appId, &hr, &error] {
+		hr = CoInitialize(NULL);
 
 		if (SUCCEEDED(hr)) {
 			IAppResolver_8* CAppResolver;
@@ -101,8 +113,14 @@ std::string ShellIntegrator::getProcessAppId(DWORD processId) {
 				hr = CAppResolver->GetAppIDForProcess(processId, &pszAppId, NULL, NULL, NULL);
 
 				if (SUCCEEDED(hr)) {
-					appId = convertToUTF8(pszAppId);
-					CoTaskMemFree(pszAppId);
+					try {
+						appId = convertToUTF8(pszAppId);
+						CoTaskMemFree(pszAppId);
+					}
+					catch (const ConversionException& e) {
+						hr = -1;
+						error = e.str;
+					}
 				}
 
 				CAppResolver->Release();
@@ -113,35 +131,43 @@ std::string ShellIntegrator::getProcessAppId(DWORD processId) {
 	});
 
 	th.join();
+
+	if (FAILED(hr))
+		throw Exception{ EXCEPTION_STRING + " | " + error };
 	return appId;
 }
 
-bool ShellIntegrator::setWindowAppId(HWND hWnd, std::string_view appId) const {
-	if (!appId.empty()) {
-		IPropertyStore *pps;
-		PROPVARIANT pv;
-		HRESULT hr;
+void ShellIntegrator::setWindowAppId(HWND hWnd, std::string_view appId) const {
+	std::wstring wAppId;
 
-		hr = SHGetPropertyStoreForWindow(hWnd, IID_PPV_ARGS(&pps));
-		if (SUCCEEDED(hr)) {
-			pv.vt = VT_LPWSTR;
-			std::wstring wAppId = convertToUTF16(appId);
-			pv.pwszVal = const_cast<wchar_t*>(wAppId.c_str());
-
-			hr = pps->SetValue(PKEY_AppUserModel_ID, pv);
-			if (SUCCEEDED(hr))
-				hr = pps->Commit();
-
-			pps->Release();
-		}
-
-		return SUCCEEDED(hr);
+	try {
+		wAppId = convertToUTF16(appId);
 	}
-	else
-		return false;
+	catch (const ConversionException& e) {
+		throw Exception{ EXCEPTION_STRING + " | " + e.str };
+	}
+
+	IPropertyStore *pps;
+	PROPVARIANT pv;
+	HRESULT hr;
+
+	hr = SHGetPropertyStoreForWindow(hWnd, IID_PPV_ARGS(&pps));
+	if (SUCCEEDED(hr)) {
+		pv.vt = VT_LPWSTR;
+		pv.pwszVal = const_cast<wchar_t*>(wAppId.c_str());
+
+		hr = pps->SetValue(PKEY_AppUserModel_ID, pv);
+		if (SUCCEEDED(hr))
+			hr = pps->Commit();
+
+		pps->Release();
+	}
+
+	if (FAILED(hr))
+		throw Exception{ EXCEPTION_STRING };
 }
 
-bool ShellIntegrator::resetWindowAppId(HWND hWnd) const {
+void ShellIntegrator::resetWindowAppId(HWND hWnd) const {
 	IPropertyStore *pps;
 	PROPVARIANT pv;
 	HRESULT hr;
@@ -157,14 +183,20 @@ bool ShellIntegrator::resetWindowAppId(HWND hWnd) const {
 		pps->Release();
 	}
 
-	return SUCCEEDED(hr);
+	if (FAILED(hr))
+		throw Exception{ EXCEPTION_STRING };
 }
 
-bool ShellIntegrator::moveButtonInGroup(const ButtonGroupInfo& bgi, int indexFrom, int indexTo) {
-	if (indexTo >= 0 && indexTo < bgi.buttonCount && indexFrom >= 0 && indexFrom < bgi.buttonCount)
-		return TTLib_ButtonMoveInButtonGroup(bgi.handle, indexFrom, indexTo);
-	else
-		return false;
+void ShellIntegrator::moveButtonInGroup(const ButtonGroupInfo& bgi, int indexFrom, int indexTo) {
+	if (indexFrom < 0 || indexFrom >= bgi.buttonCount || indexTo < 0 || indexTo >= bgi.buttonCount)
+		throw Exception{ EXCEPTION_STRING + ": incorrect indexes: " + to_string(bgi.index) + " " + to_string(indexFrom) + " " + to_string(indexTo) + " " + to_string(bgi.buttonCount) };
+
+	try {
+		ttlib.buttonMoveInButtonGroup(bgi.handle, indexFrom, indexTo);
+	}
+	catch (const TTLibWrapper::Exception& e) {
+		throw Exception{ EXCEPTION_STRING + ": " + to_string(bgi.index) + " " + to_string(indexFrom) + " " + to_string(indexTo) + " | " + e.str };
+	}
 }
 
 void ShellIntegrator::sleep(int msecs) {

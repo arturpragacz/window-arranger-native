@@ -18,5 +18,6 @@ If you configured everything correctly, the Native Application should be started
 
 ## Dependencies
 
+- [Magic Enum](https://github.com/Neargye/magic_enum)
 - [rapidjson](https://rapidjson.org/)
 - [7+ Taskbar Tweaking Library](https://rammichael.com/7-taskbar-tweaking-library)

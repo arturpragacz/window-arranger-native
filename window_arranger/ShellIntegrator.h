@@ -1,15 +1,21 @@
 #pragma once
 
-#include <TTLib.h>
+#include "pch.h"
+#include "TTLibWrapper.h"
+#include "windows_utils.h"
 
 #include <functional>
 
 using std::to_string;
 #define EXCEPTION_STRING CLASSNAME + "::" + __func__
 
+
 class ShellIntegrator {
 private:
 	static const std::string CLASSNAME;
+
+	TTLibWrapper ttlib; // can throw
+
 	bool locked = false;
 	struct Lock {
 		ShellIntegrator& shi;
@@ -47,86 +53,76 @@ public:
 
 	DWORD getParentProcessId();
 	std::string getProcessAppId(DWORD processId);
-	bool setWindowAppId(HWND hWnd, std::string_view appId) const;
-	bool resetWindowAppId(HWND hWnd) const;
-	bool moveButtonInGroup(const ButtonGroupInfo& bgi, int indexFrom, int indexTo);
+	void setWindowAppId(HWND hWnd, std::string_view appId) const;
+	void resetWindowAppId(HWND hWnd) const;
+	void moveButtonInGroup(const ButtonGroupInfo& bgi, int indexFrom, int indexTo);
 	void sleep(int msecs);
 
 	struct Exception { std::string str; };
-
-private:
-	std::string convertToUTF8(std::wstring_view wideString) const {
-		int oldLength = static_cast<int>(wideString.length());
-		char* buffer = new char[oldLength * 2];
-		int size = WideCharToMultiByte(CP_UTF8, 0, wideString.data(), oldLength, buffer, oldLength * 2, NULL, NULL);
-		std::string narrowString(buffer, size);
-		delete[] buffer;
-		return narrowString;
-	}
-	std::wstring convertToUTF16(std::string_view narrowString) const {
-		int oldLength = static_cast<int>(narrowString.length());
-		wchar_t* buffer = new wchar_t[oldLength];
-		int size = MultiByteToWideChar(CP_UTF8, 0, narrowString.data(), oldLength, buffer, oldLength);
-		std::wstring wideString(buffer, size);
-		delete[] buffer;
-		return wideString;
-	}
 };
 
-//void (*callback)(const ShellIntegrator::ButtonInfo&))
 
+//void (*callback)(const ShellIntegrator::ButtonGroupInfo&))
 template<typename T>
 void ShellIntegrator::forEachGroup(T callback) const {
 	ShellIntegrator::ButtonGroupInfo bgi;
-
-	bgi.taskbar = TTLib_GetMainTaskbar();
-	if (bgi.taskbar == NULL)
-		throw Exception{ EXCEPTION_STRING + " TTLib_GetMainTaskbar" };
-
 	int buttonGroupCount;
-	if (!TTLib_GetButtonGroupCount(bgi.taskbar, &buttonGroupCount))
-		throw Exception{ EXCEPTION_STRING + " TTLib_GetButtonGroupCount" };
 
-	WCHAR tmpAppId[MAX_APPID_LENGTH];
-	for (int i = 0; i < buttonGroupCount; ++i) {
-		bgi.index = i;
-		bgi.handle = TTLib_GetButtonGroup(bgi.taskbar, i);
-		if (bgi.handle == NULL)
-			throw Exception{ EXCEPTION_STRING + " TTLib_GetButtonGroup: " + to_string(bgi.index) };
+	try {
+		bgi.taskbar = ttlib.getMainTaskbar();
+		buttonGroupCount = ttlib.getButtonGroupCount(bgi.taskbar);
+	}
+	catch (const TTLibWrapper::Exception& e) {
+		throw Exception{ EXCEPTION_STRING + " | " + e.str };
+	}
 
-		SIZE_T length = TTLib_GetButtonGroupAppId(bgi.handle, tmpAppId, MAX_APPID_LENGTH);
-		bgi.appId = convertToUTF8(tmpAppId);
+	try {
+		for (int i = 0; i < buttonGroupCount; ++i) {
+			bgi.index = i;
+			bgi.handle = ttlib.getButtonGroup(bgi.taskbar, i);
 
-		if (!TTLib_GetButtonCount(bgi.handle, &bgi.buttonCount))
-			throw Exception{ EXCEPTION_STRING + " TTLib_GetButtonCount: " + to_string(bgi.index) };
+			std::wstring tmpAppId = ttlib.getButtonGroupAppId(bgi.handle);
+			bgi.appId = convertToUTF8(tmpAppId);
 
-		if (!callback(bgi))
-			break;
+			bgi.buttonCount = ttlib.getButtonCount(bgi.handle);
+
+			if (!callback(bgi))
+				break;
+		}
+	}
+	catch (const ConversionException& e) {
+		throw Exception{ EXCEPTION_STRING + ": " + to_string(bgi.index) + " | " + e.str };
+	}
+	catch (const TTLibWrapper::Exception& e) {
+		throw Exception{ EXCEPTION_STRING + ": " + to_string(bgi.index) + " | " + e.str };
 	}
 }
 
+//void (*callback)(const ShellIntegrator::ButtonInfo&))
 template<typename T>
 bool ShellIntegrator::forEachInGroup(const ShellIntegrator::ButtonGroupInfo& bgi, T callback) const {
 	ShellIntegrator::ButtonInfo bi(bgi);
-
 	int buttonCount = bgi.buttonCount;
-	for (int i = 0; i < buttonCount; ++i) {
-		bi.index = i;
-		bi.handle = TTLib_GetButton(bgi.handle, i);
-		if (bi.handle == NULL)
-			throw Exception{ EXCEPTION_STRING + " TTLib_GetButton: " + to_string(bgi.index) + " " + to_string(bi.index) };
 
-		bi.windowHandle = TTLib_GetButtonWindow(bi.handle);
-		if (bi.windowHandle == NULL)
-			throw Exception{ EXCEPTION_STRING + " TTLib_GetButton: " + to_string(bgi.index) + " " + to_string(bi.index) };
+	try {
+		for (int i = 0; i < buttonCount; ++i) {
+			bi.index = i;
+			bi.handle = ttlib.getButton(bgi.handle, i);
 
-		if (!callback(bi))
-			break;
+			bi.windowHandle = ttlib.getButtonWindow(bi.handle);
+
+			if (!callback(bi))
+				break;
+		}
+	}
+	catch (const TTLibWrapper::Exception& e) {
+		throw Exception{ EXCEPTION_STRING + ": " + to_string(bgi.index) + " " + to_string(bi.index) + " | " + e.str };
 	}
 
 	return true;
 }
 
+//void (*callback)(const ShellIntegrator::ButtonInfo&))
 template<typename T>
 void ShellIntegrator::forEach(T callback) const {
 	using namespace std::placeholders;

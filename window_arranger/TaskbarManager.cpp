@@ -11,20 +11,20 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 	auto organizedDestination = destination.organizeByGroup();
 	int groupsLeft = static_cast<int>(organizedDestination.size());
 
-	for (const auto& [windowGroup, posWindowVector] : organizedDestination) {
-		// przenosimy do właściwej grupy
-		for (const auto& posWindow : posWindowVector) {
-			if (posWindow->second.getGroup().isDefault())
-				shi.resetWindowAppId(posWindow->first);
-			else
-				shi.setWindowAppId(posWindow->first, posWindow->second.getGroup().getName());
-		}
-	}
-
-	// czekamy, aż zmiany rozpropagują się do graficznej powłoki
-	shi.sleep(500);
-
 	try {
+		for (const auto& [windowGroup, posWindowVector] : organizedDestination) {
+			// przenosimy do właściwej grupy
+			for (const auto& posWindow : posWindowVector) {
+				if (posWindow->second.getGroup().isDefault())
+					shi.resetWindowAppId(posWindow->first);
+				else
+					shi.setWindowAppId(posWindow->first, posWindow->second.getGroup().getName());
+			}
+		}
+
+		// czekamy, aż zmiany rozpropagują się do graficznej powłoki
+		shi.sleep(500);
+
 		auto lock = shi.scoped_lock();
 		shi.forEachGroup(
 			[this, &organizedDestination, &groupsLeft](const ShellIntegrator::ButtonGroupInfo& bgi) {
@@ -88,10 +88,7 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 								windowsLeft -= 1;
 								// przestawiamy okno na górę
 								if (bi.index != top) {
-									if (!shi.moveButtonInGroup(bgi, bi.index, top)) {
-										throw Exception{ EXCEPTION_STRING + " shi.moveButtonInGroup: " + to_string(bgi.index)
-											+ " " + to_string(bi.index) + " " + to_string(top) };
-									}
+									shi.moveButtonInGroup(bgi, bi.index, top);
 								}
 								opw->current = order.insert(order.end(), top);
 								top += 1;
@@ -149,10 +146,7 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 						int currentIndex = *orderedPosWindow.current;
 						int destinationIndex = orderedPosWindow.destination->second.getIndex();
 						assert(currentIndex <= destinationIndex);
-						if (!shi.moveButtonInGroup(bgi, currentIndex, destinationIndex)) {
-							throw Exception{ EXCEPTION_STRING + " shi.moveButtonInGroup: " + to_string(bgi.index)
-								+ " " + to_string(currentIndex) + " " + to_string(destinationIndex) };
-						}
+						shi.moveButtonInGroup(bgi, currentIndex, destinationIndex);
 
 						auto begin = order.erase(orderedPosWindow.current);
 						auto end = order.end();
@@ -171,6 +165,7 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 	catch (const ShellIntegrator::Exception& e) {
 		throw Exception{ EXCEPTION_STRING + " | " + e.str };
 	}
+
 	return updateArrangement();
 }
 
