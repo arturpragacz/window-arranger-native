@@ -31,16 +31,20 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	UNREFERENCED_PARAMETER(lpCmdLine);
 	UNREFERENCED_PARAMETER(nCmdShow);
 
-	logg("START");
+	int mainExitCode = 0;
+
+	std::FILE* standardStreams[] = { stdin, stdout, stderr };
+	for (auto& stream : standardStreams) {
+		int fileDescriptor = _fileno(stream);
+		if (_setmode(fileDescriptor, _O_BINARY) == -1) {
+			mainExitCode = error("Can't set binary mode of file descriptor: " + std::to_string(fileDescriptor), ERROR_EXIT);
+			goto mainExit;
+		}
+	}
+
 
 	try {
-		std::FILE* standardStreams[] = {stdin, stdout, stderr};
-		for (auto& stream : standardStreams) {
-			int fileDescriptor = _fileno(stream);
-			if (_setmode(fileDescriptor, _O_BINARY) == -1)
-				return error("Can't set binary mode of file descriptor: " + std::to_string(fileDescriptor), ERROR_EXIT);
-		}
-		std::ios::sync_with_stdio();
+		logg("START");
 
 		MSG msg;
 		{
@@ -82,24 +86,29 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 			}
 		}
 
+		mainExitCode = (int)msg.wParam;
+
 		logg("END");
-		return (int)msg.wParam;
 	}
 	catch (const ShellIntegrator::Exception& e) {
-		return error(e.str, ERROR_EXIT);
+		mainExitCode = error(e.str, ERROR_EXIT);
 	}
 	catch (const TaskbarManager::Exception& e) {
-		return error(e.str, ERROR_EXIT);
+		mainExitCode = error(e.str, ERROR_EXIT);
 	}
 	catch (Messenger::Exception& e) {
-		return error(e.str, ERROR_EXIT);
+		mainExitCode = error(e.str, ERROR_EXIT);
 	}
 	catch (Timer::Exception&) {
-		return error("can't create timer", ERROR_EXIT);
+		mainExitCode = error("can't create timer", ERROR_EXIT);
 	}
 	catch (...) {
-		return error("unexpected error", ERROR_EXIT);
+		mainExitCode = error("unexpected error", ERROR_EXIT);
 	}
 
-	// never should be here!
+mainExit:
+
+	Sleep(1000);
+
+	return mainExitCode;
 }

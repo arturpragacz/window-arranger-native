@@ -19,7 +19,7 @@ private:
 public:
 	template<typename FR, typename FE>
 	Messenger(TaskbarManager& tbm, const WindowGroupFactory& wgf, FR funcRead, FE funcEnd);
-	~Messenger();
+	//~Messenger();
 
 	int processMessage(const std::string& data);
 	void processTimer();
@@ -60,8 +60,10 @@ inline Messenger::Messenger(TaskbarManager& tbm, const WindowGroupFactory& wgf, 
 		}
 	}
 	funcEnd();
-}) {}
-
-inline Messenger::~Messenger() {
-	reader.join();
+}) {
+	reader.detach();
 }
+
+//inline Messenger::~Messenger() {
+//	reader.join();
+//}
