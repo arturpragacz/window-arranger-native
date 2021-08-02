@@ -102,17 +102,17 @@ public:
 	}
 
 	auto organizeByGroup() const {
-		typedef std::vector<const map::value_type*> PosWindowVector;
+		using PosWindowVector = std::vector<std::pair<map::key_type, const map::mapped_type*>>;
 		std::map<WindowGroup, PosWindowVector> organized;
-		for (const auto& posWindow : *this) {
+		for (auto& posWindow : *this) {
 			auto organizedWindowGroupIt = organized.find(posWindow.second.getGroup());
 
 			if (organizedWindowGroupIt != organized.end()) {
 				auto& vectorOfPosWindows = organizedWindowGroupIt->second;
-				vectorOfPosWindows.push_back(&posWindow);
+				vectorOfPosWindows.emplace_back(posWindow.first, &posWindow.second);
 			}
 			else {
-				organized.insert(std::pair(posWindow.second.getGroup(), std::vector<decltype(&posWindow)> { &posWindow }));
+				organized.insert(std::pair(posWindow.second.getGroup(), PosWindowVector{ std::pair(posWindow.first, &posWindow.second) }));
 			}
 		}
 

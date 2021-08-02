@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "TaskbarManager.h"
+#include "utils.h"
 
 #include <list>
 
@@ -15,10 +16,10 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 		for (const auto& [windowGroup, posWindowVector] : organizedDestination) {
 			// przenosimy do właściwej grupy
 			for (const auto& posWindow : posWindowVector) {
-				if (posWindow->second.getGroup().isDefault())
-					shi.resetWindowAppId(posWindow->first);
+				if (posWindow.second->getGroup().isDefault())
+					shi.resetWindowAppId(posWindow.first);
 				else
-					shi.setWindowAppId(posWindow->first, posWindow->second.getGroup().getName());
+					shi.setWindowAppId(posWindow.first, posWindow.second->getGroup().getName());
 			}
 		}
 
@@ -32,17 +33,16 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 				if (organizedDestinationIt != organizedDestination.end()) {
 					groupsLeft -= 1;
 
-					// typedef std::vector<const std::map<WindowHandle, Position>::value_type*> PosWindowVector;
-					// typedef std::vector<const std::pair<const WindowHandle, Position>*> PosWindowVector;
+					//using PosWindowVector = std::vector<std::pair<WindowHandle, const Position*>>;
 					auto& posWindowVector = organizedDestinationIt->second;
-					// typedef const std::pair<const WindowHandle, Position> PosWindow;
-					using PosWindow = std::remove_pointer_t<std::remove_reference_t<decltype(posWindowVector)>::value_type>;
+					//using PosWindow = std::pair<WindowHandle, const Position*>;
+					using PosWindow = std::remove_reference_t<decltype(posWindowVector)>::value_type;
 
 					// zmieniamy tylko te, które już obserwujemy
 					posWindowVector.erase(
 						std::remove_if(posWindowVector.begin(), posWindowVector.end(),
-							[&](PosWindow* p) {
-								return observed.find(p->first) == observed.end();
+							[&](PosWindow p) {
+								return observed.find(p.first) == observed.end();
 							}
 						),
 						posWindowVector.end()
@@ -51,8 +51,8 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 
 					// sortujemy po [WindowHandle]
 					std::sort(posWindowVector.begin(), posWindowVector.end(),
-						[](PosWindow* posWindow1Ptr, PosWindow* posWindow2Ptr) {
-							return posWindow1Ptr->first < posWindow2Ptr->first;
+						[](PosWindow posWindow1, PosWindow posWindow2) {
+							return posWindow1.first < posWindow2.first;
 						}
 					);
 					
@@ -60,28 +60,28 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 					std::list<int> order;
 					// pomocnicza struktura, łącząca ze sobą pozycje okien obecne i docelowe
 					struct OrderedPosWindow {
-						PosWindow* destination;
+						PosWindow posWindow;
 						decltype(order)::iterator current;
-						OrderedPosWindow(PosWindow* d, decltype(order)::iterator c)
-							: destination(d), current(c) {}
-						OrderedPosWindow(PosWindow* d)
-							: destination(d) {}
+						OrderedPosWindow(PosWindow pw, decltype(order)::iterator c)
+							: posWindow(pw), current(c) {}
+						OrderedPosWindow(PosWindow pw)
+							: posWindow(pw) {}
 					};
 					std::vector<OrderedPosWindow> orderedPosWindows;
 					std::transform(posWindowVector.begin(), posWindowVector.end(),
-						std::back_inserter(orderedPosWindows), [&order](PosWindow* d) {
-							return OrderedPosWindow(d, order.end());
+						std::back_inserter(orderedPosWindows), [&order](PosWindow pw) {
+							return OrderedPosWindow(pw, order.end());
 					});
 					// przestawiamy interesujące okna na górę, jednocześnie wypełniając [order] i pola [current] w [orderedPosWindows]
 					{
 						int windowsLeft = windowsNumber;
 						int top = 0;
 						shi.forEachInGroup(bgi, [&](const ShellIntegrator::ButtonInfo& bi) {
-							PosWindow tmpDestination = PosWindow(bi.windowHandle, Position(wgf));
+							Position tmpPosition = Position(wgf);
 							auto [opw, opw2] = std::equal_range(orderedPosWindows.begin(), orderedPosWindows.end(),
-								OrderedPosWindow(&tmpDestination),
+								OrderedPosWindow(PosWindow(bi.windowHandle, &tmpPosition)),
 								[](const OrderedPosWindow& opw1, const OrderedPosWindow& opw2) -> bool {
-								return opw1.destination->first < opw2.destination->first;
+								return opw1.posWindow.first < opw2.posWindow.first;
 							});
 
 							if (opw != opw2) {
@@ -114,29 +114,45 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 					// sortujemy po docelowym [index] malejąco
 					std::sort(orderedPosWindows.begin(), orderedPosWindows.end(),
 						[](const OrderedPosWindow& opw1, const OrderedPosWindow& opw2) {
-							return opw1.destination->second.getIndex() > opw2.destination->second.getIndex();
+							return opw1.posWindow.second->getIndex() > opw2.posWindow.second->getIndex();
 						}
 					);
 
-					// normalizujemy indeksy (gdy są za duże)
-					std::vector<std::remove_const_t<PosWindow>> changedDestinations;
-					changedDestinations.reserve(orderedPosWindows.size());
+					std::vector<Position> changedDestinations;
+					changedDestinations.resize(orderedPosWindows.size() * 2, Position(wgf));
+
 					{
-						int maxDestinationIndex = bgi.buttonCount - 1;
 						int i = 0;
+						// normalizujemy indeksy (gdy są za duże)
+						int maxDestinationIndex = bgi.buttonCount - 1;
 						for (auto& orderedPosWindow : orderedPosWindows) {
-							int destinationIndex = orderedPosWindow.destination->second.getIndex();
+							int destinationIndex = orderedPosWindow.posWindow.second->getIndex();
 							if (destinationIndex > maxDestinationIndex) {
 								destinationIndex = maxDestinationIndex;
-								Position normalizedPos = orderedPosWindow.destination->second;
+								Position normalizedPos = *orderedPosWindow.posWindow.second;
 								normalizedPos.update(destinationIndex);
-								changedDestinations.push_back(
-									PosWindow(orderedPosWindow.destination->first, std::move(normalizedPos)));
-								orderedPosWindow.destination = &changedDestinations[i];
+								changedDestinations[i] = std::move(normalizedPos);
+								orderedPosWindow.posWindow = PosWindow(orderedPosWindow.posWindow.first, &changedDestinations[i]);
 								i += 1;
 							}
 
 							maxDestinationIndex = destinationIndex - 1;
+						}
+
+						// normalizujemy indeksy (gdy są za małe)
+						int minDestinationIndex = 0;
+						for (auto& orderedPosWindow : reverse(orderedPosWindows)) {
+							int destinationIndex = orderedPosWindow.posWindow.second->getIndex();
+							if (destinationIndex < minDestinationIndex) {
+								destinationIndex = minDestinationIndex;
+								Position normalizedPos = *orderedPosWindow.posWindow.second;
+								normalizedPos.update(destinationIndex);
+								changedDestinations[i] = std::move(normalizedPos);
+								orderedPosWindow.posWindow = PosWindow(orderedPosWindow.posWindow.first, &changedDestinations[i]);
+								i += 1;
+							}
+
+							minDestinationIndex = destinationIndex + 1;
 						}
 					}
 
@@ -144,7 +160,7 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 					// robimy to w kolejności: od okna, które ma być najniżej, do okna, które ma być najwyżej
 					for (const auto& orderedPosWindow : orderedPosWindows) {
 						int currentIndex = *orderedPosWindow.current;
-						int destinationIndex = orderedPosWindow.destination->second.getIndex();
+						int destinationIndex = orderedPosWindow.posWindow.second->getIndex();
 						assert(currentIndex <= destinationIndex);
 						shi.moveButtonInGroup(bgi, currentIndex, destinationIndex);
 
