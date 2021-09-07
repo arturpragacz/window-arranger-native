@@ -117,7 +117,7 @@ std::string ShellIntegrator::getProcessAppId(DWORD processId) {
 						appId = convertToUTF8(pszAppId);
 						CoTaskMemFree(pszAppId);
 					}
-					catch (const ConversionException& e) {
+					catch (const UTFConversionException& e) {
 						hr = -1;
 						error = e.str;
 					}
@@ -143,7 +143,7 @@ void ShellIntegrator::setWindowAppId(HWND hWnd, std::string_view appId) const {
 	try {
 		wAppId = convertToUTF16(appId);
 	}
-	catch (const ConversionException& e) {
+	catch (const UTFConversionException& e) {
 		throw Exception{ EXCEPTION_STRING + " | " + e.str };
 	}
 

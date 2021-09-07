@@ -10,7 +10,7 @@ const std::string TaskbarManager::CLASSNAME = "TaskbarManager";
 
 Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 	auto organizedDestination = destination.organizeByGroup();
-	int groupsLeft = static_cast<int>(organizedDestination.size());
+	auto groupsLeft = organizedDestination.size();
 
 	try {
 		for (const auto& [windowGroup, posWindowVector] : organizedDestination) {
@@ -47,7 +47,7 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 						),
 						posWindowVector.end()
 					);
-					const int windowsNumber = static_cast<int>(posWindowVector.size());
+					const auto windowsNumber = posWindowVector.size();
 
 					// sortujemy po [WindowHandle]
 					std::sort(posWindowVector.begin(), posWindowVector.end(),
@@ -74,7 +74,7 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 					});
 					// przestawiamy interesujące okna na górę, jednocześnie wypełniając [order] i pola [current] w [orderedPosWindows]
 					{
-						int windowsLeft = windowsNumber;
+						auto windowsLeft = windowsNumber;
 						int top = 0;
 						shi.forEachInGroup(bgi, [&](const ShellIntegrator::ButtonInfo& bi) {
 							Position tmpPosition = Position(wgf);

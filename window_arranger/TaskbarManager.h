@@ -43,7 +43,7 @@ Arrangement TaskbarManager::addToObserved(InputIt first, InputIt last) {
 	std::unordered_set<WindowHandle> handles(first, last);
 	Arrangement arrangement;
 	try {
-		int windowsLeft = static_cast<int>(handles.size());
+		auto windowsLeft = handles.size();
 		auto lock = shi.scoped_lock();
 		shi.forEach([this, &handles, &arrangement, &windowsLeft](const ShellIntegrator::ButtonInfo& bi) {
 			if (handles.find(bi.windowHandle) != handles.end()) {

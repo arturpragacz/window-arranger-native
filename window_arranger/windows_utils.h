@@ -1,7 +1,7 @@
 #pragma once
 
 
-struct ConversionException { std::string str; };
+struct UTFConversionException { std::string str; };
 
 std::string convertToUTF8(std::wstring_view wideString, bool failOnInvalidCharacter = true);
 

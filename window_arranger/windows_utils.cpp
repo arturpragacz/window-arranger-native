@@ -19,7 +19,7 @@ std::string convertToUTF8(std::wstring_view wideString, bool failOnInvalidCharac
 		flags = WC_ERR_INVALID_CHARS;
 	int newLength = WideCharToMultiByte(CP_UTF8, flags, wideString.data(), oldLength, buffer, bufferSize, NULL, NULL);
 	if (!newLength)
-		throw ConversionException{ EXCEPTION_STRING + ": " + to_string(GetLastError()) };
+		throw UTFConversionException{ EXCEPTION_STRING + ": " + to_string(GetLastError()) };
 
 	narrowString.assign(buffer, newLength);
 	delete[] buffer;
@@ -41,7 +41,7 @@ std::wstring convertToUTF16(std::string_view narrowString, bool failOnInvalidCha
 		flags =	MB_ERR_INVALID_CHARS;
 	int newLength = MultiByteToWideChar(CP_UTF8, flags, narrowString.data(), oldLength, buffer, bufferSize);
 	if (!newLength)
-		throw ConversionException{ EXCEPTION_STRING + ": " + to_string(GetLastError()) };
+		throw UTFConversionException{ EXCEPTION_STRING + ": " + to_string(GetLastError()) };
 
 	wideString.assign(buffer, newLength);
 	delete[] buffer;

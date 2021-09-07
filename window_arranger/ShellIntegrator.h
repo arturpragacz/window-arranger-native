@@ -90,7 +90,7 @@ void ShellIntegrator::forEachGroup(T callback) const {
 				break;
 		}
 	}
-	catch (const ConversionException& e) {
+	catch (const UTFConversionException& e) {
 		throw Exception{ EXCEPTION_STRING + ": " + to_string(bgi.index) + " | " + e.str };
 	}
 	catch (const TTLibWrapper::Exception& e) {
@@ -109,10 +109,13 @@ bool ShellIntegrator::forEachInGroup(const ShellIntegrator::ButtonGroupInfo& bgi
 			bi.index = i;
 			bi.handle = ttlib.getButton(bgi.handle, i);
 
-			bi.windowHandle = ttlib.getButtonWindow(bi.handle);
+			try {
+				bi.windowHandle = ttlib.getButtonWindow(bi.handle);
 
-			if (!callback(bi))
-				break;
+				if (!callback(bi))
+					break;
+			}
+			catch (const TTLibWrapper::Exception&) {}
 		}
 	}
 	catch (const TTLibWrapper::Exception& e) {
