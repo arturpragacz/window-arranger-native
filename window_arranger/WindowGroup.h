@@ -71,11 +71,20 @@ public:
 		}
 	}
 
+	bool operator==(const WindowGroup& rhs) const noexcept {
+		const std::string& rhsGroupName = rhs.defGroup ? rhs.defGroupName : rhs.name;
+		const std::string& thisGroupName = defGroup ? defGroupName : name;
+		return thisGroupName == rhsGroupName;
+	}
 	bool operator<(const WindowGroup& rhs) const noexcept {
 		const std::string& rhsGroupName = rhs.defGroup ? rhs.defGroupName : rhs.name;
 		const std::string& thisGroupName = defGroup ? defGroupName : name;
-
 		return thisGroupName < rhsGroupName;
+	}
+
+	std::size_t hash() const noexcept {
+		const std::string& thisGroupName = defGroup ? defGroupName : name;
+		return std::hash<std::string>()(thisGroupName);
 	}
 
 	const std::string& getName() const noexcept {
@@ -120,6 +129,13 @@ public:
 	}
 };
 
+template<>
+struct std::hash<WindowGroup> {
+	std::size_t operator()(const WindowGroup& group) const noexcept	{
+		return group.hash();
+	}
+};
+
 class WindowGroupFactory {
 private:
 	const std::string defGroupName;
@@ -137,3 +153,4 @@ public:
 		return WindowGroup(value, defGroupName);
 	}
 };
+

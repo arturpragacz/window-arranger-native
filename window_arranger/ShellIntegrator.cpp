@@ -187,9 +187,34 @@ void ShellIntegrator::resetWindowAppId(HWND hWnd) const {
 		throw Exception{ EXCEPTION_STRING };
 }
 
+ShellIntegrator::TaskbarInfo ShellIntegrator::getMainTaskbar() const {
+	ShellIntegrator::TaskbarInfo ti;
+	try {
+		ti.handle = ttlib.getMainTaskbar();
+		ti.count = ttlib.getButtonGroupCount(ti.handle);
+	}
+	catch (const TTLibWrapper::Exception& e) {
+		throw Exception{ EXCEPTION_STRING + " | " + e.str };
+	}
+
+	return ti;
+}
+
+void ShellIntegrator::moveGroupInTaskbar(const ShellIntegrator::TaskbarInfo& ti, int indexFrom, int indexTo) {
+	if (indexFrom < 0 || indexFrom >= ti.count || indexTo < 0 || indexTo >= ti.count)
+		throw Exception{ EXCEPTION_STRING + ": incorrect indexes: " + to_string(reinterpret_cast<long long>(ti.handle)) + " " + to_string(indexFrom) + " " + to_string(indexTo) + " " + to_string(ti.count) };
+
+	try {
+		ttlib.buttonGroupMove(ti.handle, indexFrom, indexTo);
+	}
+	catch (const TTLibWrapper::Exception& e) {
+		throw Exception{ EXCEPTION_STRING + ": " + to_string(reinterpret_cast<long long>(ti.handle)) + " " + to_string(indexFrom) + " " + to_string(indexTo) + " | " + e.str };
+	}
+}
+
 void ShellIntegrator::moveButtonInGroup(const ButtonGroupInfo& bgi, int indexFrom, int indexTo) {
-	if (indexFrom < 0 || indexFrom >= bgi.buttonCount || indexTo < 0 || indexTo >= bgi.buttonCount)
-		throw Exception{ EXCEPTION_STRING + ": incorrect indexes: " + to_string(bgi.index) + " " + to_string(indexFrom) + " " + to_string(indexTo) + " " + to_string(bgi.buttonCount) };
+	if (indexFrom < 0 || indexFrom >= bgi.count || indexTo < 0 || indexTo >= bgi.count)
+		throw Exception{ EXCEPTION_STRING + ": incorrect indexes: " + to_string(bgi.index) + " " + to_string(indexFrom) + " " + to_string(indexTo) + " " + to_string(bgi.count) };
 
 	try {
 		ttlib.buttonMoveInButtonGroup(bgi.handle, indexFrom, indexTo);

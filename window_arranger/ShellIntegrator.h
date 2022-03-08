@@ -24,12 +24,18 @@ private:
 	};
 
 public:
+	struct TaskbarInfo {
+		HANDLE handle;
+		int count;
+	};
 	struct ButtonGroupInfo {
-		HANDLE taskbar;
+		const TaskbarInfo& taskbar;
 		int index;
 		HANDLE handle;
 		std::string appId;
-		int buttonCount;
+		int count;
+
+		ButtonGroupInfo(const TaskbarInfo& t) : taskbar(t) {}
 	};
 	struct ButtonInfo {
 		const ButtonGroupInfo& group;
@@ -43,9 +49,9 @@ public:
 	ShellIntegrator();
 	~ShellIntegrator();
 
-	template<typename T> void forEachGroup(T callback) const;
+	template<typename T> void forEachGroup(const ShellIntegrator::TaskbarInfo& ti, T callback) const;
 	template<typename T> bool forEachInGroup(const ShellIntegrator::ButtonGroupInfo& bgi, T callback) const;
-	template<typename T> void forEach(T callback) const;
+	template<typename T> void forEach(const ShellIntegrator::TaskbarInfo& ti, T callback) const;
 
 	void lock();
 	void unlock();
@@ -55,6 +61,8 @@ public:
 	std::string getProcessAppId(DWORD processId);
 	void setWindowAppId(HWND hWnd, std::string_view appId) const;
 	void resetWindowAppId(HWND hWnd) const;
+	TaskbarInfo getMainTaskbar() const;
+	void moveGroupInTaskbar(const ShellIntegrator::TaskbarInfo& ti, int indexFrom, int indexTo);
 	void moveButtonInGroup(const ButtonGroupInfo& bgi, int indexFrom, int indexTo);
 	void sleep(int msecs);
 
@@ -64,27 +72,18 @@ public:
 
 //void (*callback)(const ShellIntegrator::ButtonGroupInfo&))
 template<typename T>
-void ShellIntegrator::forEachGroup(T callback) const {
-	ShellIntegrator::ButtonGroupInfo bgi;
-	int buttonGroupCount;
+void ShellIntegrator::forEachGroup(const ShellIntegrator::TaskbarInfo& ti, T callback) const {
+	ShellIntegrator::ButtonGroupInfo bgi(ti);
 
 	try {
-		bgi.taskbar = ttlib.getMainTaskbar();
-		buttonGroupCount = ttlib.getButtonGroupCount(bgi.taskbar);
-	}
-	catch (const TTLibWrapper::Exception& e) {
-		throw Exception{ EXCEPTION_STRING + " | " + e.str };
-	}
-
-	try {
-		for (int i = 0; i < buttonGroupCount; ++i) {
+		for (int i = 0; i < ti.count; ++i) {
 			bgi.index = i;
-			bgi.handle = ttlib.getButtonGroup(bgi.taskbar, i);
+			bgi.handle = ttlib.getButtonGroup(bgi.taskbar.handle, i);
 
 			std::wstring tmpAppId = ttlib.getButtonGroupAppId(bgi.handle);
 			bgi.appId = convertToUTF8(tmpAppId);
 
-			bgi.buttonCount = ttlib.getButtonCount(bgi.handle);
+			bgi.count = ttlib.getButtonCount(bgi.handle);
 
 			if (!callback(bgi))
 				break;
@@ -102,10 +101,10 @@ void ShellIntegrator::forEachGroup(T callback) const {
 template<typename T>
 bool ShellIntegrator::forEachInGroup(const ShellIntegrator::ButtonGroupInfo& bgi, T callback) const {
 	ShellIntegrator::ButtonInfo bi(bgi);
-	int buttonCount = bgi.buttonCount;
+	int count = bgi.count;
 
 	try {
-		for (int i = 0; i < buttonCount; ++i) {
+		for (int i = 0; i < count; ++i) {
 			bi.index = i;
 			bi.handle = ttlib.getButton(bgi.handle, i);
 
@@ -127,7 +126,7 @@ bool ShellIntegrator::forEachInGroup(const ShellIntegrator::ButtonGroupInfo& bgi
 
 //void (*callback)(const ShellIntegrator::ButtonInfo&))
 template<typename T>
-void ShellIntegrator::forEach(T callback) const {
+void ShellIntegrator::forEach(const ShellIntegrator::TaskbarInfo& ti, T callback) const {
 	using namespace std::placeholders;
-	forEachGroup(std::bind(&ShellIntegrator::forEachInGroup<T>, this, _1, callback));
+	forEachGroup(ti, std::bind(&ShellIntegrator::forEachInGroup<T>, this, _1, callback));
 }

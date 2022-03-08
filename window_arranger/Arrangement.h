@@ -27,13 +27,13 @@ inline std::string convertWindowHandleToString(HWND wh) {
 
 class Position {
 private:
-	int index;
 	WindowGroup group;
+	int index;
 
 public:
 	explicit Position(const WindowGroupFactory& wgf) : group(wgf.build()), index(-1) {}
 	Position(int index, const WindowGroupFactory& wgf) : group(wgf.build()), index(index) {}
-	Position(const WindowGroup& group, int index) : group(group), index(index) {}
+	Position(WindowGroup group, int index) : group(std::move(group)), index(index) {}
 	Position(const rapidjson::Value& value, const WindowGroupFactory& wgf)
 		: group(wgf.build(value["group"])), index(value["index"].GetInt()) {}
 
@@ -69,41 +69,66 @@ public:
 	}
 };
 
-
-class Arrangement : public std::map<WindowHandle, Position> {
+class GroupPosition {
+private:
+	int index;
 public:
-	Arrangement() = default;
-	Arrangement(const rapidjson::Value& value, const WindowGroupFactory& wgf) {
+	GroupPosition() : index(-1) {}
+	explicit GroupPosition(int index) : index(index) {}
+	GroupPosition(const rapidjson::Value& value) : index(value["index"].GetInt()) {}
+
+	rapidjson::Value toJson(rapidjson::MemoryPoolAllocator<>& allocator) const {
+		rapidjson::Value value(rapidjson::kObjectType);
+		value.AddMember("index", index, allocator);
+		return value;
+	}
+
+	int getIndex() const {
+		return index;
+	}
+	bool update(int newIndex) {
+		bool updated = false;
+		if (this->index != newIndex) {
+			this->index = newIndex;
+			updated = true;
+		}
+		return updated;
+	}
+};
+
+
+class ArrangementWindows : public std::map<WindowHandle, Position> {
+public:
+	ArrangementWindows() = default;
+	ArrangementWindows(const rapidjson::Value& value, const WindowGroupFactory& wgf) : ArrangementWindows() {
 		for (const auto& posWindowJson : value.GetArray()) {
 			this->insert(
 				std::pair<WindowHandle, Position>(
 					convertCStringToWindowHandle(posWindowJson["handle"].GetString()),
 					Position(posWindowJson["position"], wgf)
-				)
+					)
 			);
 		}
 	}
 
-	operator bool() const {
-		return !map::empty();
-	}
+	using PosWindowVector = std::vector<std::pair<map::key_type, const map::mapped_type*>>;
+	using OrganizedArrangementWindows = std::map<WindowGroup, PosWindowVector>;
 
 	rapidjson::Value toJson(rapidjson::MemoryPoolAllocator<>& allocator) const {
 		rapidjson::Value value(rapidjson::kArrayType);
 		for (const auto& posWindow : *this) {
 			value.PushBack(
 				rapidjson::Value(rapidjson::kObjectType)
-					.AddMember("handle", convertWindowHandleToString(posWindow.first), allocator)
-					.AddMember("position", posWindow.second.toJson(allocator), allocator),
+				.AddMember("handle", convertWindowHandleToString(posWindow.first), allocator)
+				.AddMember("position", posWindow.second.toJson(allocator), allocator),
 				allocator
 			);
 		}
 		return value;
 	}
 
-	auto organizeByGroup() const {
-		using PosWindowVector = std::vector<std::pair<map::key_type, const map::mapped_type*>>;
-		std::map<WindowGroup, PosWindowVector> organized;
+	OrganizedArrangementWindows organizeByGroup() const {
+		OrganizedArrangementWindows organized;
 		for (auto& posWindow : *this) {
 			auto organizedWindowGroupIt = organized.find(posWindow.second.getGroup());
 
@@ -115,7 +140,6 @@ public:
 				organized.insert(std::pair(posWindow.second.getGroup(), PosWindowVector{ std::pair(posWindow.first, &posWindow.second) }));
 			}
 		}
-
 		return organized;
 	}
 
@@ -134,5 +158,64 @@ public:
 			}
 		}
 		return organized;
+	}
+};
+
+class ArrangementGroups : public std::map<WindowGroup, GroupPosition> {
+public:
+	ArrangementGroups() = default;
+	ArrangementGroups(const rapidjson::Value& value, const WindowGroupFactory& wgf) : ArrangementGroups() {
+		for (const auto& posGroupJson : value.GetArray()) {
+			this->insert(
+				std::pair<WindowGroup, GroupPosition>(
+					wgf.build(posGroupJson[0]),
+					GroupPosition(posGroupJson[1])
+					)
+			);
+		}
+	}
+
+	using PosGroupVector = std::vector<std::pair<map::key_type, const map::mapped_type*>>;
+
+	PosGroupVector transformToVector() const {
+		PosGroupVector transformed;
+		for (auto& posGroup : *this) {
+			transformed.emplace_back(posGroup.first, &posGroup.second);
+		}
+		return transformed;
+	}
+
+	rapidjson::Value toJson(rapidjson::MemoryPoolAllocator<>& allocator) const {
+		rapidjson::Value value(rapidjson::kArrayType);
+		for (const auto& posGroup : *this) {
+			value.PushBack(
+				rapidjson::Value(rapidjson::kArrayType)
+				.PushBack(posGroup.first.toJson(allocator), allocator)
+				.PushBack(posGroup.second.toJson(allocator), allocator),
+				allocator
+			);
+		}
+		return value;
+	}
+};
+
+class Arrangement {
+public:
+	ArrangementWindows windows;
+	ArrangementGroups groups;
+
+	Arrangement() = default;
+	Arrangement(ArrangementWindows windows, ArrangementGroups groups) : windows(std::move(windows)), groups(std::move(groups)) {}
+	Arrangement(const rapidjson::Value& value, const WindowGroupFactory& wgf) : windows(value["windows"], wgf), groups(value["groups"], wgf) {}
+
+	operator bool() const {
+		return !windows.empty() || !groups.empty();
+	}
+
+	rapidjson::Value toJson(rapidjson::MemoryPoolAllocator<>& allocator) const {
+		rapidjson::Value value(rapidjson::kObjectType);
+		value.AddMember("windows", windows.toJson(allocator), allocator);
+		value.AddMember("groups", groups.toJson(allocator), allocator);
+		return value;
 	}
 };
