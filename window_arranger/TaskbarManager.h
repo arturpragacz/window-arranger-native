@@ -81,20 +81,21 @@ Arrangement TaskbarManager::addToObserved(InputIt first, InputIt last) {
 
 template<typename InputIt>
 void TaskbarManager::deleteFromObserved(InputIt first, InputIt last) {
-	auto groupsWithRemovedWindows = std::unordered_set<WindowGroup>();
+	// niepotrzebne groupy są regularnie usuwane podczas <updateArrangement>
+	//auto groupsWithRemovedWindows = std::unordered_set<WindowGroup>();
 	for (auto handle = first; handle != last; ++handle) {
 		auto it = observed.windows.find(*handle);
 		if (it != observed.windows.end()) {
-			groupsWithRemovedWindows.insert(it->second.getGroup());
+			//groupsWithRemovedWindows.insert(it->second.getGroup());
 			observed.windows.erase(it);
 		}
 	}
-	for (const auto& posWindow : observed.windows) {
-		groupsWithRemovedWindows.erase(posWindow.second.getGroup());
-	}
-	for (const auto& group : groupsWithRemovedWindows) {
-		observed.groups.erase(group);
-	}
+	//for (const auto& posWindow : observed.windows) {
+	//	groupsWithRemovedWindows.erase(posWindow.second.getGroup());
+	//}
+	//for (const auto& group : groupsWithRemovedWindows) {
+	//	observed.groups.erase(group);
+	//}
 }
 
 inline Arrangement TaskbarManager::getArrangement() {

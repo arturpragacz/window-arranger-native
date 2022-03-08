@@ -147,7 +147,7 @@ void TaskbarManager::setArrangementT(const std::vector<std::pair<T1, const Pos*>
 	std::transform(tVector.begin(), tVector.end(),
 		std::back_inserter(orderedTs), [&order](T t) {
 			return OrderedT(t, order.end());
-	});
+		});
 
 	// sortujemy <orderedTs> po <t.first>
 	std::sort(orderedTs.begin(), orderedTs.end(),
@@ -201,8 +201,7 @@ void TaskbarManager::setArrangementT(const std::vector<std::pair<T1, const Pos*>
 	std::sort(orderedTs.begin(), orderedTs.end(),
 		[](const OrderedT& ot1, const OrderedT& ot2) {
 			return ot1.t.second->getIndex() > ot2.t.second->getIndex();
-		}
-	);
+		});
 
 	std::vector<Pos> changedDestinations;
 	changedDestinations.resize(orderedTs.size() * 2, PosCreator());
@@ -264,17 +263,6 @@ Arrangement TaskbarManager::updateArrangement() {
 		auto lock = shi.scoped_lock();
 		auto ti = shi.getMainTaskbar();
 
-		shi.forEachGroup(ti, [this, &changed](const ShellIntegrator::ButtonGroupInfo& bgi) {
-			auto group = wgf.build(bgi.appId);
-			auto it = observed.groups.find(group);
-			if (it != observed.groups.end()) {
-				auto& groupPosition = it->second;
-				if (groupPosition.update(bgi.index))
-					changed.groups.insert(std::make_pair(group, groupPosition));
-			}
-			return true;
-		});
-
 		shi.forEach(ti, [this, &changed](const ShellIntegrator::ButtonInfo& bi) {
 			auto it = observed.windows.find(bi.windowHandle);
 			if (it != observed.windows.end()) {
@@ -286,6 +274,33 @@ Arrangement TaskbarManager::updateArrangement() {
 					observed.groups.insert(std::make_pair(group, groupPosition));
 					changed.groups.insert(std::make_pair(group, groupPosition));
 				}
+			}
+			return true;
+		});
+
+		auto neededGroups = std::unordered_set<WindowGroup>();
+		std::transform(observed.windows.begin(), observed.windows.end(),
+			std::inserter(neededGroups, neededGroups.end()), [](const ArrangementWindows::value_type& winPos) {
+				const auto& [_, pos] = winPos;
+				return pos.getGroup();
+			});
+
+		for (auto it = observed.groups.begin(); it != observed.groups.end(); ) {
+			if (neededGroups.find(it->first) == neededGroups.end()) {
+				it = observed.groups.erase(it);
+			}
+			else {
+				++it;
+			}
+		}
+
+		shi.forEachGroup(ti, [this, &changed](const ShellIntegrator::ButtonGroupInfo& bgi) {
+			auto group = wgf.build(bgi.appId);
+			auto it = observed.groups.find(group);
+			if (it != observed.groups.end()) {
+				auto& groupPosition = it->second;
+				if (groupPosition.update(bgi.index))
+					changed.groups.insert_or_assign(group, groupPosition);
 			}
 			return true;
 		});
