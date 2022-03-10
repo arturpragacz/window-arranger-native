@@ -11,14 +11,14 @@
 const std::string Messenger::CLASSNAME = "Messanger";
 
 
-void Messenger::postMessage(const std::string& message) {
+void Messenger::postMessage(const std::string& message) const {
 	uint32_t size = static_cast<uint32_t>(message.length());
 	std::cout.write(reinterpret_cast<char*>(&size), sizeof size);
 	std::cout.write(&message[0], size);
 	std::cout.flush();
 }
 
-void Messenger::postMessage(const rapidjson::Value& value) {
+void Messenger::postMessage(const rapidjson::Value& value) const {
 	rapidjson::StringBuffer buffer;
 	rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
 	value.Accept(writer);
@@ -26,7 +26,7 @@ void Messenger::postMessage(const rapidjson::Value& value) {
 }
 
 
-void Messenger::fillOwnMessage(rapidjson::Document& d, int id, std::string_view status) {
+void Messenger::fillOwnMessage(rapidjson::Document& d, int id, std::string_view status) const {
 	auto& allctr = d.GetAllocator();
 
 	d.AddMember("source", "app", allctr)
@@ -35,7 +35,7 @@ void Messenger::fillOwnMessage(rapidjson::Document& d, int id, std::string_view 
 		.AddMember("status", rapidjson::Value(status.data(), static_cast<rapidjson::SizeType>(status.length())), allctr);
 }
 
-void Messenger::postOwnMessage(int id, std::string_view status) {
+void Messenger::postOwnMessage(int id, std::string_view status) const {
 	rapidjson::Document d(rapidjson::kObjectType);
 
 	fillOwnMessage(d, id, status);
@@ -44,7 +44,7 @@ void Messenger::postOwnMessage(int id, std::string_view status) {
 }
 
 template<typename T>
-void Messenger::postOwnMessage(int id, std::string_view status, T value) {
+void Messenger::postOwnMessage(int id, std::string_view status, T value) const {
 	rapidjson::Document d(rapidjson::kObjectType);
 
 	fillOwnMessage(d, id, status);
@@ -56,12 +56,12 @@ void Messenger::postOwnMessage(int id, std::string_view status, T value) {
 }
 
 template<typename T, typename>
-void Messenger::postOwnMessage(int id, T value) {
+void Messenger::postOwnMessage(int id, T value) const {
 	postOwnMessage(id, "OK", value);
 }
 
 
-void Messenger::fillResponse(rapidjson::Document& d, int id, std::string_view status) {
+void Messenger::fillResponse(rapidjson::Document& d, int id, std::string_view status) const {
 	auto& allctr = d.GetAllocator();
 
 	d.AddMember("source", "browser", allctr)
@@ -70,7 +70,7 @@ void Messenger::fillResponse(rapidjson::Document& d, int id, std::string_view st
 		.AddMember("status", rapidjson::Value(status.data(), static_cast<rapidjson::SizeType>(status.length())), allctr);
 }
 
-void Messenger::postResponse(int id, std::string_view status) {
+void Messenger::postResponse(int id, std::string_view status) const {
 	rapidjson::Document d(rapidjson::kObjectType);
 
 	fillResponse(d, id, status);
@@ -79,7 +79,7 @@ void Messenger::postResponse(int id, std::string_view status) {
 }
 
 template<typename T>
-void Messenger::postResponse(int id, std::string_view status, T value) {
+void Messenger::postResponse(int id, std::string_view status, T value) const {
 	rapidjson::Document d(rapidjson::kObjectType);
 
 	fillResponse(d, id, status);
@@ -91,12 +91,12 @@ void Messenger::postResponse(int id, std::string_view status, T value) {
 }
 
 template<typename T, typename>
-void Messenger::postResponse(int id, T value) {
+void Messenger::postResponse(int id, T value) const {
 	postResponse(id, "OK", value);
 }
 
 
-int Messenger::processMessage(const std::string& data) {
+int Messenger::processMessage(const std::string& data) const {
 	using namespace std::string_literals;
 	rapidjson::Document d;
 	if (d.Parse(data.c_str()).HasParseError())
@@ -153,7 +153,7 @@ int Messenger::processMessage(const std::string& data) {
 	return 0;
 }
 
-void Messenger::processTimer() {
+void Messenger::processTimer() const {
 	Arrangement changed = tbm.updateArrangement();
 	if (changed) {
 		static int messageIdCounter = 1;

@@ -49,16 +49,21 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 		MSG msg;
 		{
 			ShellIntegrator shi;
-			WindowGroupFactory wgf(shi.getProcessAppId(shi.getParentProcessId()));
+			const WindowGroupFactory wgf(shi.getProcessAppId(shi.getParentProcessId()));
 			TaskbarManager tbm(shi, wgf);
 			static auto parentThreadNativeId = GetCurrentThreadId();
-			Messenger msgr(tbm, wgf, [](std::string* data) {
-				return PostThreadMessage(parentThreadNativeId, WM_NEW_TEXT_INPUT, (WPARAM)data, (LPARAM)nullptr);
-			}, [] {
-				logg("Extracted in last operation: " + std::to_string(std::cin.gcount()));
-				logg("Flags after last operation: " + std::to_string(std::cin.rdstate()));
-				PostThreadMessage(parentThreadNativeId, WM_QUIT, (WPARAM)0, (LPARAM)0);
+			const Messenger msgr(tbm, wgf);
+
+			std::thread reader([] {
+				Messenger::readMessage([](std::string* data) {
+					return PostThreadMessage(parentThreadNativeId, WM_NEW_TEXT_INPUT, (WPARAM)data, (LPARAM)nullptr);
+				}, [] {
+					logg("Extracted in last operation: " + std::to_string(std::cin.gcount()));
+					logg("Flags after last operation: " + std::to_string(std::cin.rdstate()));
+					PostThreadMessage(parentThreadNativeId, WM_QUIT, (WPARAM)0, (LPARAM)0);
+				});
 			});
+			reader.detach();
 
 			Timer timer(4000);
 
