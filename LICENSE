@@ -1,4 +1,4 @@
-Copyright (C) 2019-2020 Artur Pragacz. All rights reserved.
+Copyright (C) 2019-2022 Artur Pragacz. All rights reserved.
 
 If you have downloaded a copy of the Window Arranger Native Application binary, please note that the Window Arranger Native Application binary is licensed under the Mozilla Public License Version 2.0.
 If you have downloaded a copy of the Window Arranger Native Application source code, please note that the Window Arranger Native Application source code is licensed under the Mozilla Public License Version 2.0, except for the third-party components listed below which are subject to different license terms.
@@ -10,6 +10,7 @@ Closed Source Software free for non-commercial projects
 --------------------------------------------------------------------
 
 7+ Taskbar Tweaking Library
+https://rammichael.com/7-taskbar-tweaking-library
 Copyright (C) Michael Maltsev
 
 
@@ -17,9 +18,11 @@ Open Source Software Licensed Under the MIT License
 --------------------------------------------------------------------
 
 Magic Enum
+https://github.com/Neargye/magic_enum
 Copyright (C) 2019 - 2020 Daniil Goncharov
 
 rapidjson
+https://rapidjson.org/
 Copyright (C) 2015 THL A29 Limited, a Tencent company, and Milo Yip.
 
 
