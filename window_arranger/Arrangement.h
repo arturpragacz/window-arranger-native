@@ -112,7 +112,7 @@ public:
 	}
 
 	using PosWindowVector = std::vector<std::pair<map::key_type, const map::mapped_type*>>;
-	using OrganizedArrangementWindows = std::map<WindowGroup, PosWindowVector>;
+	using OrganizedPosWindowVectors = std::map<WindowGroup, PosWindowVector>;
 
 	rapidjson::Value toJson(rapidjson::MemoryPoolAllocator<>& allocator) const {
 		rapidjson::Value value(rapidjson::kArrayType);
@@ -127,8 +127,8 @@ public:
 		return value;
 	}
 
-	OrganizedArrangementWindows organizeByGroup() const {
-		OrganizedArrangementWindows organized;
+	OrganizedPosWindowVectors organizeByGroup() const {
+		OrganizedPosWindowVectors organized;
 		for (auto& posWindow : *this) {
 			auto organizedWindowGroupIt = organized.find(posWindow.second.getGroup());
 
@@ -144,7 +144,7 @@ public:
 	}
 
 	auto organizeByGroupAndWindowHandle() const {
-		typedef std::map<map::key_type, const map::mapped_type*> PosWindowMap;
+		using PosWindowMap = std::map<map::key_type, const map::mapped_type*>;
 		std::map<WindowGroup, PosWindowMap> organized;
 		for (const auto& posWindow : *this) {
 			auto organizedWindowGroupIt = organized.find(posWindow.second.getGroup());

@@ -24,7 +24,7 @@ Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
 	return updateArrangement();
 }
 
-void TaskbarManager::setArrangementWindowGroups(const ArrangementWindows::OrganizedArrangementWindows& organizedDestinationWindows) {
+void TaskbarManager::setArrangementWindowGroups(const ArrangementWindows::OrganizedPosWindowVectors& organizedDestinationWindows) {
 	try {
 		for (const auto&[windowGroup, posWindowVector] : organizedDestinationWindows) {
 			// przenosimy do właściwej grupy
@@ -58,7 +58,7 @@ void TaskbarManager::setArrangementGroups(const ArrangementGroups& destinationGr
 
 		//using PosGroupVector = std::vector<std::pair<WindowGroup, const GroupPosition*>>;
 		auto posGroupVector = destinationGroups.transformToVector();
-		//using T = std::pair<WindowGroup, const GroupPosition*>;
+		//using PosGroup = std::pair<WindowGroup, const GroupPosition*>;
 		using PosGroup = std::remove_reference_t<decltype(posGroupVector)>::value_type;
 
 		setArrangementT(
@@ -82,7 +82,7 @@ struct TaskbarManager::ForEachInGroup {
 	using CallbackArg = ShellIntegrator::ButtonInfo;
 };
 
-void TaskbarManager::setArrangementWindows(ArrangementWindows::OrganizedArrangementWindows& organizedDestinationWindows) {
+void TaskbarManager::setArrangementWindows(ArrangementWindows::OrganizedPosWindowVectors& organizedDestinationWindows) {
 	auto groupsLeft = organizedDestinationWindows.size();
 
 	try {
@@ -94,7 +94,7 @@ void TaskbarManager::setArrangementWindows(ArrangementWindows::OrganizedArrangem
 
 				//using PosWindowVector = std::vector<std::pair<WindowHandle, const Position*>>;
 				auto& posWindowVector = organizedDestinationIt->second;
-				//using T = std::pair<WindowHandle, const Position*>;
+				//using PosWindow = std::pair<WindowHandle, const Position*>;
 				using PosWindow = std::remove_reference_t<decltype(posWindowVector)>::value_type;
 
 				// zmieniamy tylko te, które już obserwujemy
@@ -128,31 +128,31 @@ void TaskbarManager::setArrangementWindows(ArrangementWindows::OrganizedArrangem
 }
 
 template<typename T1, typename Pos, typename PosC, typename TC, typename S1, typename S2, typename S3>
-void TaskbarManager::setArrangementT(const std::vector<std::pair<T1, const Pos*>>& tVector, PosC PosCreator, TC tCreator, const S1& parentInfo, S2 forEachFunc, S3 moveFunc) {
+void TaskbarManager::setArrangementT(std::vector<std::pair<T1, const Pos*>>& tVector, PosC PosCreator, TC tCreator, const S1& parentInfo, S2 forEachFunc, S3 moveFunc) {
 	using T = std::pair<T1, const Pos*>;
 
 	// obecna kolejność (rosnąco)
 	std::list<int> order;
 	// pomocnicza struktura, łącząca ze sobą pozycje obecne i docelowe
 	struct OrderedT {
-		T t;
+		T* t;
 		std::list<int>::iterator current;
-		OrderedT(T t, std::list<int>::iterator c)
+		OrderedT(T* t, std::list<int>::iterator c)
 			: t(t), current(c) {}
-		OrderedT(T t)
+		OrderedT(T* t)
 			: t(t) {}
 	};
 
 	std::vector<OrderedT> orderedTs;
 	std::transform(tVector.begin(), tVector.end(),
-		std::back_inserter(orderedTs), [&order](T t) {
-			return OrderedT(t, order.end());
+		std::back_inserter(orderedTs), [&order](T& t) {
+			return OrderedT(&t, order.end());
 		});
 
-	// sortujemy <orderedTs> po <t.first>
+	// sortujemy <orderedTs> po <t->first>
 	std::sort(orderedTs.begin(), orderedTs.end(),
 		[](OrderedT ot1, OrderedT ot2) {
-			return ot1.t.first < ot2.t.first;
+			return ot1.t->first < ot2.t->first;
 		}
 	);
 	const auto tCount = orderedTs.size();
@@ -163,10 +163,10 @@ void TaskbarManager::setArrangementT(const std::vector<std::pair<T1, const Pos*>
 		int top = 0;
 		forEachFunc(parentInfo, [&](const S2::CallbackArg& childInfo) {
 			Pos tmpPos = PosCreator();
-			auto [ot, ot2] = std::equal_range(orderedTs.begin(), orderedTs.end(),
-				OrderedT(tCreator(childInfo, &tmpPos)),
+			T tmpT = tCreator(childInfo, &tmpPos);
+			auto [ot, ot2] = std::equal_range(orderedTs.begin(), orderedTs.end(), OrderedT(&tmpT),
 				[](const OrderedT& ot1, const OrderedT& ot2) -> bool {
-					return ot1.t.first < ot2.t.first;
+					return ot1.t->first < ot2.t->first;
 				}
 			);
 
@@ -196,47 +196,67 @@ void TaskbarManager::setArrangementT(const std::vector<std::pair<T1, const Pos*>
 		),
 		orderedTs.end()
 	);
+	
+	std::vector<Pos> changedDestinations;
+	changedDestinations.resize(orderedTs.size(), PosCreator());
+
+	{
+		// obsługujemy ujemne indeksy
+		int i = 0;
+		for (auto& orderedT : orderedTs) {
+			int destinationIndex = orderedT.t->second->getIndex();
+			if (destinationIndex < 0) {
+				destinationIndex = parentInfo.count + destinationIndex;
+				Pos newPos = *orderedT.t->second;
+				newPos.update(destinationIndex);
+				changedDestinations[i] = std::move(newPos);
+				orderedT.t->second = &changedDestinations[i];
+			}
+
+			i += 1;
+		}
+	}
 
 	// sortujemy po docelowym <index> malejąco
 	std::sort(orderedTs.begin(), orderedTs.end(),
 		[](const OrderedT& ot1, const OrderedT& ot2) {
-			return ot1.t.second->getIndex() > ot2.t.second->getIndex();
+			return ot1.t->second->getIndex() > ot2.t->second->getIndex();
 		});
 
-	std::vector<Pos> changedDestinations;
-	changedDestinations.resize(orderedTs.size() * 2, PosCreator());
-
 	{
-		int i = 0;
 		// normalizujemy indeksy (gdy są za duże)
+		int i = 0;
 		int maxDestinationIndex = parentInfo.count - 1;
 		for (auto& orderedT : orderedTs) {
-			int destinationIndex = orderedT.t.second->getIndex();
+			int destinationIndex = orderedT.t->second->getIndex();
 			if (destinationIndex > maxDestinationIndex) {
 				destinationIndex = maxDestinationIndex;
-				Pos normalizedPos = *orderedT.t.second;
-				normalizedPos.update(destinationIndex);
-				changedDestinations[i] = std::move(normalizedPos);
-				orderedT.t = T(orderedT.t.first, &changedDestinations[i]);
-				i += 1;
+				Pos newPos = *orderedT.t->second;
+				newPos.update(destinationIndex);
+				changedDestinations[i] = std::move(newPos);
+				orderedT.t->second = &changedDestinations[i];
 			}
 
+			i += 1;
 			maxDestinationIndex = destinationIndex - 1;
 		}
-
+	}
+	
+	{
 		// normalizujemy indeksy (gdy są za małe)
+		int i = 0;
 		int minDestinationIndex = 0;
 		for (auto& orderedT : reverse(orderedTs)) {
-			int destinationIndex = orderedT.t.second->getIndex();
+			int destinationIndex = orderedT.t->second->getIndex();
 			if (destinationIndex < minDestinationIndex) {
 				destinationIndex = minDestinationIndex;
-				Pos normalizedPos = *orderedT.t.second;
-				normalizedPos.update(destinationIndex);
-				changedDestinations[i] = std::move(normalizedPos);
-				orderedT.t = T(orderedT.t.first, &changedDestinations[i]);
-				i += 1;
+				Pos newPos = *orderedT.t->second;
+				newPos.update(destinationIndex);
+				changedDestinations[i] = std::move(newPos);
+				orderedT.t->second = &changedDestinations[i];
 			}
 
+			i += 1;
 			minDestinationIndex = destinationIndex + 1;
 		}
 	}
@@ -245,7 +265,7 @@ void TaskbarManager::setArrangementT(const std::vector<std::pair<T1, const Pos*>
 	// robimy to w kolejności: od obiektu, który ma być najdalej (najniżej), do obiektu, który ma być najbliżej (najwyżej)
 	for (const auto& orderedT : orderedTs) {
 		int currentIndex = *orderedT.current;
-		int destinationIndex = orderedT.t.second->getIndex();
+		int destinationIndex = orderedT.t->second->getIndex();
 		assert(currentIndex <= destinationIndex);
 		(shi.*moveFunc)(parentInfo, currentIndex, destinationIndex);
 
