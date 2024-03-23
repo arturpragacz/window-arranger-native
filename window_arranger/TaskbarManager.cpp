@@ -8,36 +8,58 @@
 const std::string TaskbarManager::CLASSNAME = "TaskbarManager";
 
 
-Arrangement TaskbarManager::setArrangement(const Arrangement& destination) {
+TaskbarManager::SetArrangementResult TaskbarManager::setArrangement(const Arrangement& destination) {
 	auto organizedDestinationWindows = destination.windows.organizeByGroup();
+	auto destinationGroups = destination.groups.transformToVector();
+
+	ArrangementGroups::PosGroupVector notSetGroups;
+	ArrangementWindows::PosWindowVector notSetWindows;
 
 	try {
-		setArrangementWindowGroups(organizedDestinationWindows);
+		setArrangementWindowGroups(destination);
 		auto lock = shi.scoped_lock();
-		setArrangementGroups(destination.groups);
-		setArrangementWindows(organizedDestinationWindows);
+		notSetGroups = setArrangementGroups(destinationGroups);
+		notSetWindows = setArrangementWindows(organizedDestinationWindows);
 	}
 	catch (const ShellIntegrator::Exception& e) {
 		throw Exception{ EXCEPTION_STRING + " | " + e.str };
 	}
 
-	return updateArrangement();
+	auto arrangement = updateArrangement();
+
+	return { arrangement, notSetGroups, notSetWindows };
 }
 
-void TaskbarManager::setArrangementWindowGroups(const ArrangementWindows::OrganizedPosWindowVectors& organizedDestinationWindows) {
+void TaskbarManager::setArrangementWindowGroups(const Arrangement& destination) {
 	try {
-		for (const auto&[windowGroup, posWindowVector] : organizedDestinationWindows) {
-			// przenosimy do właściwej grupy
-			for (const auto& posWindow : posWindowVector) {
-				if (posWindow.second->getGroup().isDefault())
-					shi.resetWindowAppId(posWindow.first);
-				else
-					shi.setWindowAppId(posWindow.first, posWindow.second->getGroup().getName());
-			}
-		}
+		auto destinationWindows = destination.windows;
+		while (true) {
+			auto current = getArrangement(
+				[&destinationWindows](HWND handle) {
+					return destinationWindows.find(handle) != destinationWindows.end();
+				},
+				false
+			);
+			if (!current)
+				break;
 
-		// czekamy, aż zmiany rozpropagują się do graficznej powłoki
-		shi.sleep(500);
+			for (const auto& [handle, position] : current.windows) {
+				auto it = destinationWindows.find(handle);
+				if (position.getGroup() == it->second.getGroup())
+					destinationWindows.erase(it);
+			}
+			if (destinationWindows.empty())
+				break;
+
+			for (const auto& [handle, position] : destinationWindows) {
+				if (position.getGroup().isDefault())
+					shi.resetWindowAppId(handle);
+				else
+					shi.setWindowAppId(handle, position.getGroup().getName());
+			}
+
+			shi.sleep(250);
+		}
 	}
 	catch (const ShellIntegrator::Exception& e) {
 		throw Exception{ EXCEPTION_STRING + " | " + e.str };
@@ -52,22 +74,22 @@ struct TaskbarManager::ForEachGroup {
 	using CallbackArg = ShellIntegrator::ButtonGroupInfo;
 };
 
-void TaskbarManager::setArrangementGroups(const ArrangementGroups& destinationGroups) {
+// zwraca te, które nie zostały ustawione (bo nie istnieją lub się powtarzają)
+ArrangementGroups::PosGroupVector TaskbarManager::setArrangementGroups(ArrangementGroups::PosGroupVector& destinationGroups) {
 	try {
 		auto ti = shi.getMainTaskbar();
 
-		//using PosGroupVector = std::vector<std::pair<WindowGroup, const GroupPosition*>>;
-		auto posGroupVector = destinationGroups.transformToVector();
 		//using PosGroup = std::pair<WindowGroup, const GroupPosition*>;
-		using PosGroup = std::remove_reference_t<decltype(posGroupVector)>::value_type;
+		using PosGroup = ArrangementGroups::PosGroup;
 
-		setArrangementT(
-			posGroupVector,
+		return setArrangementT(
+			destinationGroups,
 			[] { return GroupPosition(); },
 			[&](const ShellIntegrator::ButtonGroupInfo& bgi, const GroupPosition* tmpPos) { return PosGroup(wgf.build(bgi.appId), tmpPos); },
 			ti,
 			ForEachGroup(shi),
-			&ShellIntegrator::moveGroupInTaskbar);
+			&ShellIntegrator::moveGroupInTaskbar
+		);
 	}
 	catch (const ShellIntegrator::Exception& e) {
 		throw Exception{ EXCEPTION_STRING + " | " + e.str };
@@ -82,53 +104,63 @@ struct TaskbarManager::ForEachInGroup {
 	using CallbackArg = ShellIntegrator::ButtonInfo;
 };
 
-void TaskbarManager::setArrangementWindows(ArrangementWindows::OrganizedPosWindowVectors& organizedDestinationWindows) {
+// zwraca te, które nie zostały ustawione (bo nie istnieją lub się powtarzają lub ich nie obserwujemy)
+ArrangementWindows::PosWindowVector TaskbarManager::setArrangementWindows(ArrangementWindows::OrganizedPosWindowVectors& organizedDestinationWindows) {
 	auto groupsLeft = organizedDestinationWindows.size();
 
 	try {
+		//using PosWindow = std::pair<WindowHandle, const Position*>;
+		using PosWindow = ArrangementWindows::PosWindow;
+		std::vector<PosWindow> notSetVector;
+
 		shi.forEachGroup(shi.getMainTaskbar(),
-			[this, &organizedDestinationWindows, &groupsLeft](const ShellIntegrator::ButtonGroupInfo& bgi) {
-			auto organizedDestinationIt = organizedDestinationWindows.find(wgf.build(bgi.appId));
-			if (organizedDestinationIt != organizedDestinationWindows.end()) {
-				groupsLeft -= 1;
+			[this, &organizedDestinationWindows, &groupsLeft, &notSetVector](const ShellIntegrator::ButtonGroupInfo& bgi) {
+				auto organizedDestinationIt = organizedDestinationWindows.find(wgf.build(bgi.appId));
+				if (organizedDestinationIt != organizedDestinationWindows.end()) {
+					groupsLeft -= 1;
 
-				//using PosWindowVector = std::vector<std::pair<WindowHandle, const Position*>>;
-				auto& posWindowVector = organizedDestinationIt->second;
-				//using PosWindow = std::pair<WindowHandle, const Position*>;
-				using PosWindow = std::remove_reference_t<decltype(posWindowVector)>::value_type;
+					//using PosWindowVector = std::vector<std::pair<WindowHandle, const Position*>>;
+					auto& posWindowVector = organizedDestinationIt->second;
 
-				// zmieniamy tylko te, które już obserwujemy
-				posWindowVector.erase(
-					std::remove_if(posWindowVector.begin(), posWindowVector.end(),
-						[&](PosWindow p) {
-							return observed.windows.find(p.first) == observed.windows.end();
-						}
-					),
-					posWindowVector.end()
-				);
+					// usuwamy te, których nie obserwujemy (i później zwracamy je w rezultacie funkcji)
+					{
+						auto notSetBeginIt = std::partition(posWindowVector.begin(), posWindowVector.end(),
+							[&](PosWindow p) {
+								return observed.windows.find(p.first) != observed.windows.end();
+							}
+						);
+						notSetVector.insert(notSetVector.end(), std::make_move_iterator(notSetBeginIt), std::make_move_iterator(posWindowVector.end()));
+						posWindowVector.erase(notSetBeginIt, posWindowVector.end());
+					}
 
-				setArrangementT(
-					posWindowVector,
-					[&] { return Position(wgf); },
-					[](const ShellIntegrator::ButtonInfo& bi, const Position* tmpPos) { return PosWindow(bi.windowHandle, tmpPos); },
-					bgi,
-					ForEachInGroup(shi),
-					&ShellIntegrator::moveButtonInGroup);
+					auto notSetPartVector = setArrangementT(
+						posWindowVector,
+						[&] { return Position(wgf); },
+						[](const ShellIntegrator::ButtonInfo& bi, const Position* tmpPos) { return PosWindow(bi.windowHandle, tmpPos); },
+						bgi,
+						ForEachInGroup(shi),
+						&ShellIntegrator::moveButtonInGroup
+					);
+					notSetVector.insert(notSetVector.end(), std::make_move_iterator(notSetPartVector.begin()), std::make_move_iterator(notSetPartVector.end()));
+				}
+
+				if (groupsLeft > 0)
+					return true;
+				else
+					return false;
 			}
+		);
 
-			if (groupsLeft > 0)
-				return true;
-			else
-				return false;
-		});
+		return notSetVector;
 	}
 	catch (const ShellIntegrator::Exception& e) {
 		throw Exception{ EXCEPTION_STRING + " | " + e.str };
 	}
 }
 
+// zwraca te, które nie zostały ustawione (bo nie istnieją lub się powtarzają)
 template<typename T1, typename Pos, typename PosC, typename TC, typename S1, typename S2, typename S3>
-void TaskbarManager::setArrangementT(std::vector<std::pair<T1, const Pos*>>& tVector, PosC PosCreator, TC tCreator, const S1& parentInfo, S2 forEachFunc, S3 moveFunc) {
+std::vector<std::pair<T1, const Pos*>> TaskbarManager::setArrangementT(std::vector<std::pair<T1, const Pos*>>& tVector, PosC PosCreator, TC tCreator, const S1& parentInfo, S2 forEachFunc, S3 moveFunc) {
 	using T = std::pair<T1, const Pos*>;
 
 	// obecna kolejność (rosnąco)
@@ -147,7 +179,8 @@ void TaskbarManager::setArrangementT(std::vector<std::pair<T1, const Pos*>>& tVe
 	std::transform(tVector.begin(), tVector.end(),
 		std::back_inserter(orderedTs), [&order](T& t) {
 			return OrderedT(&t, order.end());
-		});
+		}
+	);
 
 	// sortujemy <orderedTs> po <t->first>
 	std::sort(orderedTs.begin(), orderedTs.end(),
@@ -187,15 +220,21 @@ void TaskbarManager::setArrangementT(std::vector<std::pair<T1, const Pos*>>& tVe
 		});
 	}
 
-	// usuwamy te, których obiekty nie istnieją (lub które się powtarzają)
-	orderedTs.erase(
-		std::remove_if(orderedTs.begin(), orderedTs.end(),
+	// usuwamy te, których obiekty nie istnieją lub które się powtarzają (i później zwracamy je jako rezultat funkcji)
+	std::vector<T> notSetVector;
+	{
+		auto notSetBeginIt = std::partition(orderedTs.begin(), orderedTs.end(),
 			[&](const OrderedT& ot) {
-				return ot.current == order.end();
+				return ot.current != order.end();
 			}
-		),
-		orderedTs.end()
-	);
+		);
+		std::transform(notSetBeginIt, orderedTs.end(),
+			std::back_inserter(notSetVector), [](const OrderedT& orderedT) {
+				return *orderedT.t;
+			}
+		);
+		orderedTs.erase(notSetBeginIt, orderedTs.end());
+	}
 	
 	std::vector<Pos> changedDestinations;
 	changedDestinations.resize(orderedTs.size(), PosCreator());
@@ -221,7 +260,8 @@ void TaskbarManager::setArrangementT(std::vector<std::pair<T1, const Pos*>>& tVe
 	std::sort(orderedTs.begin(), orderedTs.end(),
 		[](const OrderedT& ot1, const OrderedT& ot2) {
 			return ot1.t->second->getIndex() > ot2.t->second->getIndex();
-		});
+		}
+	);
 
 	{
 		// normalizujemy indeksy (gdy są za duże)
@@ -275,6 +315,8 @@ void TaskbarManager::setArrangementT(std::vector<std::pair<T1, const Pos*>>& tVe
 			*indexIt -= 1;
 		}
 	}
+
+	return notSetVector;
 }
 
 Arrangement TaskbarManager::updateArrangement() {

@@ -111,7 +111,8 @@ public:
 		}
 	}
 
-	using PosWindowVector = std::vector<std::pair<map::key_type, const map::mapped_type*>>;
+	using PosWindow = std::pair<map::key_type, const map::mapped_type*>;
+	using PosWindowVector = std::vector<PosWindow>;
 	using OrganizedPosWindowVectors = std::map<WindowGroup, PosWindowVector>;
 
 	rapidjson::Value toJson(rapidjson::MemoryPoolAllocator<>& allocator) const {
@@ -119,8 +120,8 @@ public:
 		for (const auto& posWindow : *this) {
 			value.PushBack(
 				rapidjson::Value(rapidjson::kObjectType)
-				.AddMember("handle", convertWindowHandleToString(posWindow.first), allocator)
-				.AddMember("position", posWindow.second.toJson(allocator), allocator),
+					.AddMember("handle", convertWindowHandleToString(posWindow.first), allocator)
+					.AddMember("position", posWindow.second.toJson(allocator), allocator),
 				allocator
 			);
 		}
@@ -175,7 +176,8 @@ public:
 		}
 	}
 
-	using PosGroupVector = std::vector<std::pair<map::key_type, const map::mapped_type*>>;
+	using PosGroup = std::pair<map::key_type, const map::mapped_type*>;
+	using PosGroupVector = std::vector<PosGroup>;
 
 	PosGroupVector transformToVector() const {
 		PosGroupVector transformed;
@@ -190,8 +192,8 @@ public:
 		for (const auto& posGroup : *this) {
 			value.PushBack(
 				rapidjson::Value(rapidjson::kArrayType)
-				.PushBack(posGroup.first.toJson(allocator), allocator)
-				.PushBack(posGroup.second.toJson(allocator), allocator),
+					.PushBack(posGroup.first.toJson(allocator), allocator)
+					.PushBack(posGroup.second.toJson(allocator), allocator),
 				allocator
 			);
 		}

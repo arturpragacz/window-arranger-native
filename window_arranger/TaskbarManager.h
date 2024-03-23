@@ -4,6 +4,9 @@
 #include "Arrangement.h"
 #include "ShellIntegrator.h"
 
+#define RAPIDJSON_HAS_STDSTRING 1
+#include <rapidjson/document.h>
+
 #include <vector>
 #include <unordered_set>
 
@@ -27,7 +30,12 @@ public:
 	Arrangement getArrangement();
 	template<typename InputIt>
 	Arrangement getArrangement(InputIt first, InputIt last, bool inObserved = true);
-	Arrangement setArrangement(const Arrangement& arrangement);
+	struct SetArrangementResult {
+		Arrangement arrangement;
+		ArrangementGroups::PosGroupVector notSetGroups;
+		ArrangementWindows::PosWindowVector notSetWindows;
+	};
+	SetArrangementResult setArrangement(const Arrangement& arrangement);
 	Arrangement updateArrangement();
 
 	struct Exception { std::string str; };
@@ -35,11 +43,11 @@ public:
 private:
 	template<typename Pred>
 	Arrangement getArrangement(Pred isGoodHandle, bool inObserved);
-	void setArrangementWindowGroups(const ArrangementWindows::OrganizedPosWindowVectors& organizedDestinationWindows);
-	void setArrangementGroups(const ArrangementGroups& destinationGroups);
-	void setArrangementWindows(ArrangementWindows::OrganizedPosWindowVectors& organizedDestinationWindows);
+	void setArrangementWindowGroups(const Arrangement& destination);
+	ArrangementGroups::PosGroupVector setArrangementGroups(ArrangementGroups::PosGroupVector& destinationGroups);
+	ArrangementWindows::PosWindowVector setArrangementWindows(ArrangementWindows::OrganizedPosWindowVectors& organizedDestinationWindows);
 	template<typename T1, typename Pos, typename PosC, typename TC, typename S1, typename S2, typename S3>
-	void setArrangementT(std::vector<std::pair<T1, const Pos*>>& tVector, PosC PosCreator, TC tCreator, const S1& parentInfo, S2 forEachFunc, S3 moveFunc);
+	std::vector<std::pair<T1, const Pos*>> setArrangementT(std::vector<std::pair<T1, const Pos*>>& tVector, PosC PosCreator, TC tCreator, const S1& parentInfo, S2 forEachFunc, S3 moveFunc);
 	struct ForEachGroup;
 	struct ForEachInGroup;
 };

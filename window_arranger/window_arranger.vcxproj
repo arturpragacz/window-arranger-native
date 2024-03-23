@@ -196,6 +196,7 @@ xcopy /y /d "..\other\register_native.ps1" "$(OutDir)"</Command>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Arrangement.h" />
+    <ClInclude Include="Json.h" />
     <ClInclude Include="windows_utils.h" />
     <ClInclude Include="Messenger.h" />
     <ClInclude Include="pch.h" />
